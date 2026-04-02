@@ -6,7 +6,7 @@ import numpy as np
 from modules.detector import ObjectDetector
 from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
-from modules.kalman import KalmanFilter1D
+from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
 import time
 
