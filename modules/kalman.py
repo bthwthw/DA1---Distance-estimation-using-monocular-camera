@@ -51,7 +51,6 @@ class KalmanFilter2D:
         self.MAX_SPEED = 33.3  
         self.MAX_ACCEL = 8.0   
         
-        # --- THÊM BIẾN LƯU TRỮ TỈ LỆ BOX ---
         self.last_valid_dist = initial_pos
 
     def update(self, measurement, box_w=None, box_h=None):
@@ -59,37 +58,34 @@ class KalmanFilter2D:
         measurement: Khoảng cách tính từ YOLO (m)
         box_w, box_h: Chiều rộng và cao của Bounding Box để check lỗi mất bánh xe
         """
-        # 1. Dự đoán (Predict)
+        # Predict
         x_prior = np.dot(self.A, self.x)
         P_prior = np.dot(np.dot(self.A, self.P), self.A.T) + self.Q
         
-        # 2. KIỂM TRA LỖI HÌNH HỌC (Aspect Ratio Check)
         is_glitch = False
-        if box_w is not None and box_h is not None:
-            ratio = box_w / box_h
-            # Xe con thường ratio ~1.5-2.0. Nếu ratio > 2.8 là mất bánh xe chắc chắn
-            if ratio > 2.8: 
-                is_glitch = True
+        # aspect ratio check
+        # if box_w is not None and box_h is not None:
+        #     ratio = box_w / box_h
+        #     if ratio > 2.8: 
+        #         is_glitch = True
 
-        # 3. KIỂM TRA LỖI VẬT LÝ (Innovation Gating)
+        # Innovation Gating
         innovation = measurement - np.dot(self.H, x_prior)
-        # Nếu khoảng cách nhảy vọt > 5m trong 0.1s (phi thực tế)
-        if abs(innovation) > 5.0:
+        # if innovation big, glitch 
+        if abs(innovation) > 10.0:
             is_glitch = True
 
-        # --- CHIẾN THUẬT CỨU VÃN ---
         if is_glitch:
-            # Nếu lỗi, ta không cập nhật YOLO, chỉ lấy dự đoán x_prior
+            # if glitch, use prediction as smoothed value, not update P 
             self.x = x_prior
             self.P = P_prior 
         else:
-            # Nếu ổn, chạy Update Kalman bình thường
             S = np.dot(self.H, np.dot(P_prior, self.H.T)) + self.R
             K = np.dot(np.dot(P_prior, self.H.T), np.linalg.inv(S))
             self.x = x_prior + np.dot(K, innovation)
             self.P = np.dot((np.eye(2) - np.dot(K, self.H)), P_prior)
 
-        # 4. Ràng buộc vận tốc & gia tốc
+        # speed, acceleration limit check
         self.x[1, 0] = np.clip(self.x[1, 0], -self.MAX_SPEED, self.MAX_SPEED)
         v_diff = self.x[1, 0] - x_prior[1, 0]
         max_v_change = self.MAX_ACCEL * self.dt

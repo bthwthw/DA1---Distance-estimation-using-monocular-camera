@@ -46,6 +46,7 @@ class VisionSystem:
         
         self.history = {} 
         self.kalman_filters = {}
+        self.kalman_filters_2 = {}
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -83,10 +84,21 @@ class VisionSystem:
                             if obj_id not in self.kalman_filters:
                                 self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, v_bottom)
                             v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom)
-                            current_distance = self.estimator.estimate(v_bottom_muot)
-                            if current_distance < 0: continue
+                            raw_distance = self.estimator.estimate(v_bottom_muot)
+                            if raw_distance < 0: continue
 
-                            # Matching Label (Chỉ Log 1 lần duy nhất ở đây)
+                            if obj_id not in self.kalman_filters_2:
+                                self.kalman_filters_2[obj_id] = KalmanFilter2D(
+                                    dt=1.0/self.fps_assumed, 
+                                    process_noise=5.0, 
+                                    measurement_noise=0.01, 
+                                    initial_pos=raw_distance
+                                )
+                            
+                            box_w, box_h = x2 - x1, y2 - y1
+                            current_distance = self.kalman_filters_2[obj_id].update(raw_distance, box_w, box_h)
+
+                            # Matching Label 
                             best_iou = 0
                             best_z_gt = -1
                             for gt_obj in gt_objects:
@@ -99,15 +111,13 @@ class VisionSystem:
                             else:
                                 logger.log_unmatched()
 
-                            # Tính TTC
+                            # TTC
                             ttc, status, color = float('inf'), "GO", (0, 255, 0)
 
                             if obj_id in self.history:
-                                # 1. Tính vận tốc tương đối (Dùng Kalman Velocity sẽ tốt hơn nhiều)
-                                # Nếu Thu dùng Kalman 2D, hãy lấy self.kalman_filters[obj_id].x[1, 0]
+                                
                                 raw_v_rel = (self.history[obj_id] - current_distance) * self.fps_assumed
                                 
-                                # 2. Chỉ xét nếu xe đang tiến lại gần và ở khoảng cách đủ gần (< 25m)
                                 if raw_v_rel > 0.5 and current_distance < 25.0: 
                                     ttc = current_distance / raw_v_rel
                                     
@@ -141,7 +151,6 @@ class VisionSystem:
                                 cv2.putText(frame, label, (x1, y1-25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
                                 cv2.putText(frame, f"Status: {status}", (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-                # Kết thúc frame
                 logger.log_frame(time.time() - start_inf)
                 
                 if not headless:

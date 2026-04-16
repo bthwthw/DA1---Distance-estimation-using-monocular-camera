@@ -22,7 +22,7 @@ for seq in sequences:
         print(f"\n>>> Đang xử lý Set: {seq}...")
         try:
             app = VisionSystem(img_dir, calib_file, label_file)
-            app.run(headless=True) 
+            app.run(headless=False) 
         except Exception as e:
             print(f"Lỗi ở set {seq}: {e}")
     else:
