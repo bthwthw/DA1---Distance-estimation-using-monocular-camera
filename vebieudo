@@ -1,0 +1,22 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def draw_comparison_chart(seq):
+    df = pd.read_csv(f'logs/{seq}_details.csv')
+    best_id = df['obj_id'].value_counts().idxmax()
+    subset = df[df['obj_id'] == best_id]
+
+    plt.figure(figsize=(12, 5))
+    
+    plt.plot(subset['frame'], subset['dist_gt'], 'k--', label='Thực tế', alpha=0.6)
+    
+    plt.plot(subset['frame'], subset['dist_pred'], 'b-', label='Dự đoán', linewidth=2)
+    
+    plt.title(f'Distance Tracking Analysis - Sequence {seq}', fontsize=14)
+    plt.xlabel('Frame Number')
+    plt.ylabel('Distance (meters)')
+    plt.legend()
+    plt.grid(True, linestyle=':', alpha=0.7)
+    plt.show()
+
+draw_comparison_chart("0011")

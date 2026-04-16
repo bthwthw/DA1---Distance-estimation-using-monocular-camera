@@ -4,28 +4,37 @@ import csv
 import os
 
 class SystemLogger:
-    def __init__(self, sequence_name):
+    def __init__(self, sequence_name, log_dir="logs"):
         self.sequence_name = sequence_name
+        self.log_dir = log_dir
         self.start_time = time.time()
         
-        # Thống kê khoảng cách
-        self.errors = {'near': [], 'mid': [], 'far': []}
+        # Đảm bảo thư mục log tồn tại
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+            
+        # File log chi tiết từng frame cho sequence này
+        self.detail_file = os.path.join(self.log_dir, f"{sequence_name}_details.csv")
+        self._init_detail_file()
+
+        # Thống kê tổng hợp
         self.mape_list = []
-        
-        # Thống kê hiệu năng
         self.inference_times = []
         self.total_yolo_boxes = 0
         self.unmatched_boxes = 0
-        
-        # Thống kê mAP (giả lập dựa trên IoU)
         self.ious = []
 
+    def _init_detail_file(self):
+        """Khởi tạo header cho file log chi tiết"""
+        with open(self.detail_file, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['frame', 'obj_id', 'dist_gt', 'dist_pred', 'error_pct', 'iou'])
+
     def log_frame(self, inf_time):
-        """Ghi lại thời gian xử lý của mỗi frame"""
         self.inference_times.append(inf_time)
 
-    def log_match(self, dist_pred, dist_gt, iou):
-        """Ghi lại kết quả khi YOLO khớp với Label"""
+    def log_match(self, frame_idx, obj_id, dist_pred, dist_gt, iou):
+        """Ghi log chi tiết vào file và lưu thống kê tổng hợp"""
         error = abs(dist_pred - dist_gt)
         percent_error = (error / dist_gt) * 100
         
@@ -33,19 +42,22 @@ class SystemLogger:
         self.ious.append(iou)
         self.total_yolo_boxes += 1
         
-        if dist_gt <= 20: self.errors['near'].append(error)
-        elif dist_gt <= 50: self.errors['mid'].append(error)
-        else: self.errors['far'].append(error)
+        # Ghi ngay vào file chi tiết để vẽ biểu đồ đường sau này
+        with open(self.detail_file, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([frame_idx, obj_id, round(dist_gt, 3), round(dist_pred, 3), round(percent_error, 2), round(iou, 2)])
 
     def log_unmatched(self):
-        """Ghi lại khi YOLO bắt sai hoặc Label không có"""
         self.total_yolo_boxes += 1
         self.unmatched_boxes += 1
 
     def get_summary(self):
         avg_mape = np.mean(self.mape_list) if self.mape_list else 0
-        avg_inf = np.mean(self.inference_times) * 1000 # đổi sang ms
-        fps = 1.0 / (avg_inf / 1000) if avg_inf > 0 else 0
+        # Nếu inf_time đã là giây, nhân 1000 ra ms. Nếu đã là ms thì giữ nguyên.
+        avg_inf = np.mean(self.inference_times) 
+        if avg_inf < 1.0: avg_inf *= 1000 # Giả định nếu < 1 thì đang đơn vị giây
+            
+        fps = 1000.0 / avg_inf if avg_inf > 0 else 0
         mAP_approx = np.mean(self.ious) if self.ious else 0
         
         return {
@@ -64,4 +76,5 @@ class SystemLogger:
             writer = csv.DictWriter(f, fieldnames=s.keys())
             if not file_exists: writer.writeheader()
             writer.writerow(s)
-        print(f"Đã lưu kết quả set {self.sequence_name} vào {filename}")
+        print(f"\n--- [SUMMARY {self.sequence_name}] ---")
+        print(f"MRE: {s['mre']*100:.2f}% | FPS: {s['fps']} | Miss: {s['miss_rate']}%")

@@ -38,12 +38,13 @@ class VisionSystem:
         self.f_y, self.c_y = read_kitti_calib(calib_file)
         
         self.detector = ObjectDetector(model_path=MODEL_PATH)
+        self.alert_counters = {} 
         self.estimator = DistanceEstimator(self.f_y, CAMERA_HEIGHT, self.c_y)
         self.label_reader = KittiLabelReader(label_file)
 
         self.image_paths = sorted(glob.glob(os.path.join(sequence_dir, '*.png')))
         
-        self.history = {} # {id_vật_thể: khoảng_cách_mét_ở_frame_trước}
+        self.history = {} 
         self.kalman_filters = {}
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
@@ -94,23 +95,46 @@ class VisionSystem:
                                     best_iou, best_z_gt = iou, gt_obj['z_gt']
                             
                             if best_iou > 0.5:
-                                logger.log_match(current_distance, best_z_gt, best_iou)
+                                logger.log_match(frame_idx, obj_id, current_distance, best_z_gt, best_iou)
                             else:
                                 logger.log_unmatched()
 
                             # Tính TTC
                             ttc, status, color = float('inf'), "GO", (0, 255, 0)
+
                             if obj_id in self.history:
-                                v_rel = (self.history[obj_id] - current_distance) * self.fps_assumed
-                                if v_rel > 0:
-                                    ttc = current_distance / v_rel
-                                    if ttc <= 4.0 or current_distance < 1.5:
-                                        color, status = (0, 0, 255), f"STOP: {ttc:.1f}s"
+                                # 1. Tính vận tốc tương đối (Dùng Kalman Velocity sẽ tốt hơn nhiều)
+                                # Nếu Thu dùng Kalman 2D, hãy lấy self.kalman_filters[obj_id].x[1, 0]
+                                raw_v_rel = (self.history[obj_id] - current_distance) * self.fps_assumed
+                                
+                                # 2. Chỉ xét nếu xe đang tiến lại gần và ở khoảng cách đủ gần (< 25m)
+                                if raw_v_rel > 0.5 and current_distance < 25.0: 
+                                    ttc = current_distance / raw_v_rel
+                                    
+                                    if ttc <= 2.5 or current_distance < 2.0: 
+                                        new_status = "STOP"
+                                        new_color = (0, 0, 255)
+                                    elif ttc <= 5.0:
+                                        new_status = "WARN"
+                                        new_color = (0, 255, 255)
                                     else:
-                                        color, status = (0, 255, 255), f"WARN: {ttc:.1f}s"
+                                        new_status = "GO"
+                                        new_color = (0, 255, 0)
+                                        
+                                    if new_status == "STOP":
+                                        self.alert_counters[obj_id] = self.alert_counters.get(obj_id, 0) + 1
+                                    else:
+                                        self.alert_counters[obj_id] = 0
+                                        
+                                    if self.alert_counters.get(obj_id, 0) >= 5:
+                                        status, color = f"!!! {new_status}: {ttc:.1f}s !!!", new_color
+                                    elif new_status == "WARN":
+                                        status, color = f"{new_status}: {ttc:.1f}s", new_color
+                                else:
+                                    self.alert_counters[obj_id] = 0
+
                             self.history[obj_id] = current_distance
 
-                            # VẼ LÊN FRAME (Nếu không Headless thì vẽ ngay trong vòng lặp này)
                             if not headless:
                                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                                 label = f"ID:{obj_id}|D:{current_distance:.1f}m|GT:{best_z_gt:.1f}m"
