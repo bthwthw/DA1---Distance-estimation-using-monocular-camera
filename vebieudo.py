@@ -19,4 +19,7 @@ def draw_comparison_chart(seq):
     plt.grid(True, linestyle=':', alpha=0.7)
     plt.show()
 
-draw_comparison_chart("0011")
+for i in range(0, 21):
+    if i == 5 or i == 8 or i == 12 or i == 14:
+        continue
+    draw_comparison_chart(f"{i:04d}")
