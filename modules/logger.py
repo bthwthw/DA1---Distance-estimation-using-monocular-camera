@@ -9,12 +9,10 @@ class SystemLogger:
         self.log_dir = log_dir
         self.start_time = time.time()
         
-        # Đảm bảo thư mục log tồn tại
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
             
-        # File log chi tiết từng frame cho sequence này
-        self.detail_file = os.path.join(self.log_dir, f"{sequence_name}_details_2.csv")
+        self.detail_file = os.path.join(self.log_dir, f"{sequence_name}_details.csv")
         self._init_detail_file()
 
         # Thống kê tổng hợp
@@ -25,7 +23,7 @@ class SystemLogger:
         self.ious = []
 
     def _init_detail_file(self):
-        """Khởi tạo header cho file log chi tiết"""
+        """Add header"""
         with open(self.detail_file, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(['frame', 'obj_id', 'dist_gt', 'dist_pred', 'error_pct', 'iou'])
@@ -34,7 +32,7 @@ class SystemLogger:
         self.inference_times.append(inf_time)
 
     def log_match(self, frame_idx, obj_id, dist_pred, dist_gt, iou):
-        """Ghi log chi tiết vào file và lưu thống kê tổng hợp"""
+        """Log matched object details"""
         error = abs(dist_pred - dist_gt)
         percent_error = (error / dist_gt) * 100
         
@@ -42,7 +40,6 @@ class SystemLogger:
         self.ious.append(iou)
         self.total_yolo_boxes += 1
         
-        # Ghi ngay vào file chi tiết để vẽ biểu đồ đường sau này
         with open(self.detail_file, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([frame_idx, obj_id, round(dist_gt, 3), round(dist_pred, 3), round(percent_error, 2), round(iou, 2)])
@@ -53,9 +50,8 @@ class SystemLogger:
 
     def get_summary(self):
         avg_mape = np.mean(self.mape_list) if self.mape_list else 0
-        # Nếu inf_time đã là giây, nhân 1000 ra ms. Nếu đã là ms thì giữ nguyên.
         avg_inf = np.mean(self.inference_times) 
-        if avg_inf < 1.0: avg_inf *= 1000 # Giả định nếu < 1 thì đang đơn vị giây
+        if avg_inf < 1.0: avg_inf *= 1000
             
         fps = 1000.0 / avg_inf if avg_inf > 0 else 0
         mAP_approx = np.mean(self.ious) if self.ious else 0
@@ -69,12 +65,12 @@ class SystemLogger:
             'miss_rate': round((self.unmatched_boxes / self.total_yolo_boxes)*100, 2) if self.total_yolo_boxes > 0 else 0
         }
 
-    def save_csv(self, filename="final_results_2.csv"):
+    def save_csv(self, filename="final_results.csv"):
         s = self.get_summary()
         file_exists = os.path.isfile(filename)
         with open(filename, 'a', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=s.keys())
             if not file_exists: writer.writeheader()
             writer.writerow(s)
-        print(f"\n--- [SUMMARY {self.sequence_name}] ---")
+        print(f"--- [SUMMARY {self.sequence_name}] ---")
         print(f"MRE: {s['mre']*100:.2f}% | FPS: {s['fps']} | Miss: {s['miss_rate']}%")

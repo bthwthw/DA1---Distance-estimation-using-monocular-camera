@@ -5,50 +5,42 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 def draw_mre_chart(csv_path):
-    # 1. Đọc dữ liệu từ file CSV
-    # Đảm bảo seq được đọc dưới dạng chuỗi (string) để giữ các số 0 ở đầu
     df = pd.read_csv(csv_path, dtype={'seq': str})
 
-    # 2. Thiết lập logic màu sắc
-    # Xanh: < 10% | Vàng: 10% - 20% | Đỏ: >= 20%
     colors = []
     for val in df['mre']:
         if val < 0.10:
-            colors.append('#2ecc71') # Xanh lá (Green)
+            colors.append('#2ecc71') 
         elif val < 0.20:
-            colors.append('#f1c40f') # Vàng (Yellow)
+            colors.append('#f1c40f') 
         else:
-            colors.append('#e74c3c') # Đỏ (Red)
+            colors.append('#e74c3c')
 
-    # 3. Khởi tạo khung hình
     plt.figure(figsize=(15, 7.5))
     
-    # Chuyển MRE sang đơn vị % để vẽ
+    # MRE % 
     mre_percent = df['mre'] * 100
     bars = plt.bar(df['seq'], mre_percent, color=colors, edgecolor='black', linewidth=0.5, alpha=0.9)
 
-    # 4. Thêm các đường ngưỡng (Threshold lines)
+    # Threshold lines
     plt.axhline(y=10, color='gray', linestyle='--', linewidth=1, alpha=0.6)
     plt.axhline(y=20, color='gray', linestyle='--', linewidth=1, alpha=0.6)
 
-    # 5. Ghi số liệu phần trăm lên đầu mỗi cột
     for bar in bars:
         height = bar.get_height()
         plt.text(bar.get_x() + bar.get_width()/2., height + 0.5,
                  f'{height:.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
 
-    # 6. Trang trí biểu đồ
     plt.title('Performance Analysis: Distance Estimation Error per Sequence', fontsize=16, pad=20, fontweight='bold')
     plt.xlabel('KITTI Sequence', fontsize=12, labelpad=10)
     plt.ylabel('Mean Relative Error (MRE) %', fontsize=12, labelpad=10)
     
-    plt.ylim(0, max(mre_percent) + 5) # Tạo khoảng trống phía trên để ghi số
+    plt.ylim(0, max(mre_percent) + 5) 
     plt.grid(axis='y', linestyle=':', alpha=0.3)
     
-    # Tối ưu hóa layout và lưu file
     plt.tight_layout()
     plt.savefig('mre_comparison_chart.png', dpi=300)
-    print("✅ Đã xuất biểu đồ thành công: mre_comparison_chart.png")
+    print("Đã xuất biểu đồ thành công: mre_comparison_chart.png")
     plt.show()
 
 
@@ -72,9 +64,9 @@ def draw_comparison_chart(seq):
     plt.show()
 
 
-draw_mre_chart('final_result.csv')
-for i in range(21):
-    if i == 5 or i == 8 or i == 12 or i == 14:
-        continue
-    draw_comparison_chart(f"{i:04d}")
+draw_mre_chart('final_results.csv')
+# for i in range(21):
+#     if i == 5 or i == 8 or i == 12 or i == 14:
+#         continue
+#     draw_comparison_chart(f"{i:04d}")
     
