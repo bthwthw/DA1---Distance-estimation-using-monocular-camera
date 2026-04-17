@@ -49,24 +49,32 @@ def draw_comparison_chart(seq):
     best_id = df['obj_id'].value_counts().idxmax()
     subset = df[df['obj_id'] == best_id]
 
+    abs_error = (subset['dist_gt'] - subset['dist_pred']).abs()
+    relative_error = abs_error / subset['dist_gt']
+    mre_id = relative_error.mean()
+    mre_percent = mre_id * 100
+
     plt.figure(figsize=(12, 5))
     
     plt.plot(subset['frame'], subset['dist_gt'], 'k--', label='Thực tế', alpha=0.6)
-    
     plt.plot(subset['frame'], subset['dist_pred'], 'b-', label='Dự đoán', linewidth=2)
+
+    stats_text = f'Object ID: {best_id}\nMRE: {mre_percent:.2f}%'
+    plt.text(0.02, 0.95, stats_text, transform=plt.gca().transAxes, 
+             fontsize=12, verticalalignment='top', fontweight='bold',
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
     
     plt.title(f'Distance Tracking Analysis - Sequence {seq}', fontsize=14)
     plt.xlabel('Frame Number')
     plt.ylabel('Distance (meters)')
     plt.legend()
     plt.grid(True, linestyle=':', alpha=0.7)
-    plt.savefig(f'comparison_chart_{seq}.png')
+    plt.savefig(f'plots/comparison_chart_{seq}.png')
     plt.show()
 
-
-draw_mre_chart('final_results.csv')
-# for i in range(21):
-#     if i == 5 or i == 8 or i == 12 or i == 14:
-#         continue
-#     draw_comparison_chart(f"{i:04d}")
+# draw_mre_chart('final_results.csv')
+for i in range(21):
+    if i == 5 or i == 8 or i == 12 or i == 14:
+        continue
+    draw_comparison_chart(f"{i:04d}")
     

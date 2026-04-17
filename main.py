@@ -50,7 +50,7 @@ class VisionSystem:
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
-    def run(self, headless=True):
+    def run(self, headless=False):
             print(f"System started. Mode: {'Headless' if headless else 'GUI'}")
             logger = SystemLogger(self.sequence_dir.split('/')[-1])
             
@@ -87,16 +87,16 @@ class VisionSystem:
                             raw_distance = self.estimator.estimate(v_bottom_muot)
                             if raw_distance < 0: continue
 
-                            if obj_id not in self.kalman_filters_2:
-                                self.kalman_filters_2[obj_id] = KalmanFilter2D(
-                                    dt=1.0/self.fps_assumed, 
-                                    process_noise=5.0, 
-                                    measurement_noise=0.01, 
-                                    initial_pos=raw_distance
-                                )
-                            
-                            box_w, box_h = x2 - x1, y2 - y1
-                            current_distance = self.kalman_filters_2[obj_id].update(raw_distance, box_w, box_h)
+                            # if obj_id not in self.kalman_filters_2:
+                            #     self.kalman_filters_2[obj_id] = KalmanFilter2D(
+                            #         dt=1.0/self.fps_assumed, 
+                            #         process_noise=5.0, 
+                            #         measurement_noise=0.01, 
+                            #         initial_pos=raw_distance
+                            #     )
+                            # box_w, box_h = x2 - x1, y2 - y1
+                            # current_distance = self.kalman_filters_2[obj_id].update(raw_distance, box_w, box_h)
+                            current_distance = raw_distance
 
                             # Matching Label 
                             best_iou = 0
@@ -118,7 +118,7 @@ class VisionSystem:
                                 
                                 raw_v_rel = (self.history[obj_id] - current_distance) * self.fps_assumed
                                 
-                                if raw_v_rel > 0.5 and current_distance < 25.0: 
+                                if raw_v_rel > 0.5 and current_distance < 15.0: 
                                     ttc = current_distance / raw_v_rel
                                     
                                     if ttc <= 2.5 or current_distance < 2.0: 
@@ -158,15 +158,12 @@ class VisionSystem:
                     cv2.imshow("Robot Vision Demo", frame)
                     if cv2.waitKey(1) == ord('q'): break
 
-            summary = logger.get_summary()
-            print(f"\n📊 KẾT QUẢ CUỐI CÙNG SET {summary['seq']}:")
-            print(f"- MRE: {summary['mre']} | Speed: {summary['inf_time']}ms ({summary['fps']} FPS)")
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0020' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0020.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0020.txt'
+    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0017' 
+    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0017.txt'
+    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0017.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
     
