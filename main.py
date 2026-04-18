@@ -80,83 +80,98 @@ class VisionSystem:
                         if cls_id in [0, 2] and box.id is not None:
                             obj_id = int(box.id[0])
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            u, v_bottom_raw = self.detector.get_bottom_center(box)
-                            if cv2.pointPolygonTest(corridor_pts, (u, v_bottom_raw), False) < 0:
-                                continue
-                            
                             box_h_raw = y2 - y1
 
                             # 1. KHỞI TẠO CÁC BIẾN CHO OBJ MỚI
                             if obj_id not in self.dist_history:
-                                self.dist_history[obj_id] = deque(maxlen=10) # Lưu khoảng cách (Z)
-                                self.h_history[obj_id] = []                  # Cập nhật danh sách H
-                                self.calibrated_H[obj_id] = None             # H chuẩn chưa có
+                                self.dist_history[obj_id] = deque(maxlen=10) 
+                                # CHÚ Ý: Dùng deque cho h_history để làm "cửa sổ trượt"
+                                self.h_history[obj_id] = deque(maxlen=10)    
+                                self.calibrated_H[obj_id] = None             
                                 self.geom_cooldown[obj_id] = 0
-                                
-                                # Khởi tạo Kalman cho chiều cao hộp (box_h)
-                                self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, box_h_raw)
+                                self.kalman_filters[obj_id] = KalmanFilter1D(0.1, 5.0, box_h_raw)
                             
                             box_h_muot = self.kalman_filters[obj_id].update(box_h_raw)
+                            
+                            # Tính sẵn 2 loại khoảng cách thô
+                            u, v_bottom_raw = self.detector.get_bottom_center(box)
+                            if cv2.pointPolygonTest(corridor_pts, (u, v_bottom_raw), False) < 0:
+                                continue
+                            raw_dist_gcp = self.estimator.estimate_ground(v_bottom_raw)
+                            
+                            # Nếu chưa có H chuẩn, mượn tạm 1.52m để làm gốc check lỗi
+                            my_H = self.calibrated_H[obj_id] if self.calibrated_H[obj_id] else 1.52
+                            raw_dist_geom = (self.f_y * my_H) / box_h_muot
 
-                            # 2. GIAI ĐOẠN HIỆU CHUẨN (DƯỚI 10 FRAME)
-                            if len(self.h_history[obj_id]) < 10 and self.calibrated_H[obj_id] is None:
-                                # Tạm dùng Đường chân trời để lấy Z chuẩn ban đầu
-                                u, v_bottom_raw = self.detector.get_bottom_center(box)
-                                current_distance = self.estimator.estimate_ground(v_bottom_raw)
-                                
-                                if current_distance > 0:
-                                    # Suy ngược chiều cao vật lý thật của chiếc xe này
-                                    real_H = (current_distance * box_h_muot) / self.f_y
-                                    self.h_history[obj_id].append(real_H)
-                                    self.dist_history[obj_id].append(current_distance)
-                                
-                                method_used = f"CALIBRATING ({len(self.h_history[obj_id])}/10)"
-                                
-                                # Nếu vừa đủ 10 frame -> CHỐT SỔ CHIỀU CAO
-                                if len(self.h_history[obj_id]) == 10:
-                                    self.calibrated_H[obj_id] = sum(self.h_history[obj_id]) / 10.0
-
-                            # 3. GIAI ĐOẠN TRACKING ĐỘC LẬP (TỪ FRAME THỨ 10)
-                            else:
+                            # 2. HỆ THỐNG KIỂM SOÁT LỖI (ANOMALY DETECTOR)
+                            is_glitch = False
+                            if len(self.dist_history[obj_id]) > 0:
                                 last_dist = self.dist_history[obj_id][-1]
                                 
-                                # Dùng GEOMETRY ONLY với H ĐÃ ĐƯỢC HIỆU CHUẨN
-                                my_H = self.calibrated_H[obj_id]
-                                raw_dist_geom = (self.f_y * my_H) / box_h_muot
+                                # Chọn khoảng cách để check lỗi tùy theo trạng thái
+                                check_dist = raw_dist_geom if self.calibrated_H[obj_id] else raw_dist_gcp
                                 
-                                # --- HỆ THỐNG BẮT LỖI ---
-                                is_glitch = False
-                                
-                                # Bẫy 1: Nhảy vọt
+                                # Bẫy 1: Nhảy vọt > 25%
                                 dynamic_threshold = max(3.0, last_dist * 0.25)
-                                if abs(raw_dist_geom - last_dist) > dynamic_threshold:
+                                if abs(check_dist - last_dist) > dynamic_threshold:
                                     is_glitch = True
                                 
-                                # Bẫy 2: Lỗi rung kim (Dựa vào std của Stack)
-                                past_dists = list(self.dist_history[obj_id])
-                                deltas = [past_dists[i] - past_dists[i-1] for i in range(1, len(past_dists))]
-                                if np.std(deltas) > 1.5:
-                                    is_glitch = True
+                                # Bẫy 2: Rung kim (Dựa vào std của Stack khoảng cách)
+                                if len(self.dist_history[obj_id]) >= 4:
+                                    past_dists = list(self.dist_history[obj_id])
+                                    deltas = [past_dists[i] - past_dists[i-1] for i in range(1, len(past_dists))]
+                                    if np.std(deltas) > 1.5:
+                                        is_glitch = True
 
-                                # Kích hoạt Cooldown nếu sập bẫy
-                                if is_glitch:
-                                    self.geom_cooldown[obj_id] = 3 
+                            if is_glitch:
+                                self.geom_cooldown[obj_id] = 3 
 
-                                # Xử lý
-                                if self.geom_cooldown[obj_id] > 0:
-                                    current_distance = last_dist # Đóng băng khoảng cách
-                                    method_used = f"GEOM_HOLD({self.geom_cooldown[obj_id]})"
+                            # 3. ĐƯA RA QUYẾT ĐỊNH XỬ LÝ
+                            if self.geom_cooldown[obj_id] > 0:
+                                # ĐANG BỊ LỖI (CHATTERING / OCCLUSION)
+                                current_distance = self.dist_history[obj_id][-1] if len(self.dist_history[obj_id])>0 else raw_dist_geom
+                                method_used = f"HOLD({self.geom_cooldown[obj_id]})"
+                                
+                                # Xóa sạch lịch sử H vì chuỗi quan sát ổn định đã bị đứt gãy!
+                                self.h_history[obj_id].clear()
+                                
+                                # Ép Kalman đứng im
+                                box_h_virtual = (self.f_y * my_H) / current_distance
+                                self.kalman_filters[obj_id].x = box_h_virtual 
+                                
+                                self.geom_cooldown[obj_id] -= 1
+                                
+                            else:
+                                # ĐANG QUAN SÁT TỐT (KHÔNG LỖI)
+                                if self.calibrated_H[obj_id] is None:
+                                    # Giai đoạn Hiệu chuẩn: Đo bằng GCP
+                                    current_distance = raw_dist_gcp
                                     
-                                    # Ép Kalman nhớ chiều cao hộp ảo để không bị nhiễu
-                                    box_h_virtual = (self.f_y * my_H) / current_distance
-                                    self.kalman_filters[obj_id].x = box_h_virtual 
+                                    if current_distance > 0:
+                                        real_H = (current_distance * box_h_muot) / self.f_y
+                                        self.h_history[obj_id].append(real_H)
+                                        
+                                    method_used = f"CALIB ({len(self.h_history[obj_id])}/10)"
                                     
-                                    self.geom_cooldown[obj_id] -= 1
+                                    # TƯ DUY CỦA THU: Kiểm định độ tin cậy của 10 frame
+                                    if len(self.h_history[obj_id]) == 10:
+                                        h_std = np.std(self.h_history[obj_id])
+                                        
+                                        # Ngưỡng lệch chuẩn: 0.15m (15 cm). 
+                                        # Chiều cao xe không thay đổi, nếu lệch < 15cm là cực kỳ chuẩn!
+                                        if h_std < 0.15: 
+                                            self.calibrated_H[obj_id] = np.mean(self.h_history[obj_id])
+                                        else:
+                                            # Bị nhiễu nhẹ. Không chốt! 
+                                            # Vì h_history là deque, frame cũ nhất sẽ rớt ra ở vòng sau, 
+                                            # hệ thống tự động tìm cửa sổ 10 frame mượt nhất.
+                                            method_used = f"NOISY (std:{h_std:.2f})"
                                 else:
+                                    # Giai đoạn Tracking: Xài GEOMETRY 100%
                                     current_distance = raw_dist_geom
                                     method_used = "GEOM_TRACK"
 
-                                self.dist_history[obj_id].append(current_distance)
+                            self.dist_history[obj_id].append(current_distance)
                             
                             if current_distance < 0: continue
                             
