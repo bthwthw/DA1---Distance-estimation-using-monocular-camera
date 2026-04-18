@@ -12,7 +12,7 @@ class SystemLogger:
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
             
-        self.detail_file = os.path.join(self.log_dir, f"{sequence_name}_details.csv")
+        self.detail_file = os.path.join(self.log_dir, f"{sequence_name}_details_3.csv")
         self._init_detail_file()
 
         # Thống kê tổng hợp

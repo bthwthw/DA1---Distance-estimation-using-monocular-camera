@@ -11,12 +11,21 @@ class DistanceEstimator:
         self.c_h = camera_height_m
         self.v_horizon = horizon_y
 
-    def estimate(self, v_bottom_px):
+    def estimate_ground(self, v_bottom_px):
         """
-        Công thức: Z = (f_y * C_h) / (V_bottom - V_horizon)
+        Z = (f_y * C_h) / (V_bottom - V_horizon)
         """
         if v_bottom_px <= self.v_horizon: 
             return -1.0 
         
         distance_m = (self.f_y * self.c_h) / (v_bottom_px - self.v_horizon)
+        return distance_m
+    
+    def estimate_geometry(self, bbox_h_px):
+        """
+        Z = (f * H) / h
+        """
+        if bbox_h_px <= 0:
+            return -1.0
+        distance_m = (self.f_y * self.PHYSICAL_CAR_HEIGHT) / bbox_h_px
         return distance_m

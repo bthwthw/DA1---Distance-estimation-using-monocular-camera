@@ -9,6 +9,7 @@ from modules.evaluator import KittiLabelReader, calculate_iou
 from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
 import time
+from collections import deque
 
 MODEL_PATH = 'yolov8n_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
@@ -47,6 +48,7 @@ class VisionSystem:
         self.history = {} 
         self.kalman_filters = {}
         self.kalman_filters_2 = {}
+        self.dist_history = {}
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -84,20 +86,40 @@ class VisionSystem:
                             if obj_id not in self.kalman_filters:
                                 self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, v_bottom)
                             v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom)
-                            raw_distance = self.estimator.estimate(v_bottom_muot)
-                            if raw_distance < 0: continue
 
-                            # if obj_id not in self.kalman_filters_2:
-                            #     self.kalman_filters_2[obj_id] = KalmanFilter2D(
-                            #         dt=1.0/self.fps_assumed, 
-                            #         process_noise=5.0, 
-                            #         measurement_noise=0.01, 
-                            #         initial_pos=raw_distance
-                            #     )
-                            # box_w, box_h = x2 - x1, y2 - y1
-                            # current_distance = self.kalman_filters_2[obj_id].update(raw_distance, box_w, box_h)
-                            current_distance = raw_distance
+                            raw_dist_gcp = self.estimator.estimate_ground(v_bottom_muot)
+                            box_h = y2 - y1
 
+                            current_distance = raw_dist_gcp
+                            method_used = "GCP"
+
+                            if obj_id not in self.dist_history:
+                                self.dist_history[obj_id] = deque(maxlen=10)
+                                H_initial = (raw_dist_gcp * box_h) / self.estimator.f_y
+                                self.dist_history[obj_id].append((raw_dist_gcp, H_initial))
+
+                            # glitch?
+                            else: 
+                                last_dist = self.dist_history[obj_id][-1][0]
+                                
+                                if abs(raw_dist_gcp - last_dist) <= 0.7:
+                                    # calculate H, store (raw_dist_gcp, H_estimated) into stack 
+                                    H_estimated = (raw_dist_gcp * box_h) / self.estimator.f_y
+                                    self.dist_history[obj_id].append((raw_dist_gcp, H_estimated))
+                                    current_distance = raw_dist_gcp
+                                    method_used = "GCP"
+
+                                # Nếu nhảy vọt > 2.0m trong 0.1s, tương đương 72 km/h tương đối
+                                else:
+                                    # using geometry method with dynamic H (mean) calculated from past history
+                                    past_H_values = [item[1] for item in self.dist_history[obj_id]]
+                                    avg_H = sum(past_H_values) / len(past_H_values)
+                                    current_distance = (self.estimator.f_y * avg_H) / box_h
+                                    method_used = "GEOM"
+                                    self.dist_history[obj_id].append((current_distance, avg_H))
+
+                            if current_distance < 0: continue
+                            
                             # Matching Label 
                             best_iou = 0
                             best_z_gt = -1
@@ -108,9 +130,11 @@ class VisionSystem:
                             
                             if best_iou > 0.5:
                                 logger.log_match(frame_idx, obj_id, current_distance, best_z_gt, best_iou)
+                                print(f"Frame {frame_idx} | ID {obj_id} | ERROR: {(current_distance-gt_obj['z_gt']):.2f}m | Method: {method_used}")
+
                             else:
                                 logger.log_unmatched()
-
+                            
                             # TTC
                             ttc, status, color = float('inf'), "GO", (0, 255, 0)
 
@@ -161,9 +185,9 @@ class VisionSystem:
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0017' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0017.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0017.txt'
+    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0018' 
+    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0018.txt'
+    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0018.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
     
