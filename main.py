@@ -50,6 +50,8 @@ class VisionSystem:
         self.kalman_filters_2 = {}
         self.dist_history = {}
         self.geom_cooldown = {}
+        self.h_history = {}      # Lưu danh sách H của 10 frame đầu
+        self.calibrated_H = {}   # Lưu con số H trung bình đã được chốt
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -79,65 +81,83 @@ class VisionSystem:
                             obj_id = int(box.id[0])
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
                             u, v_bottom_raw = self.detector.get_bottom_center(box)
-                            dist_super_raw = self.estimator.estimate_ground(v_bottom_raw)
                             if cv2.pointPolygonTest(corridor_pts, (u, v_bottom_raw), False) < 0:
                                 continue
-                            box_h = y2 - y1
+                            
+                            box_h_raw = y2 - y1
 
-                            # 2. KHỞI TẠO LẦN ĐẦU (Init)
+                            # 1. KHỞI TẠO CÁC BIẾN CHO OBJ MỚI
                             if obj_id not in self.dist_history:
-                                self.dist_history[obj_id] = deque(maxlen=10)
+                                self.dist_history[obj_id] = deque(maxlen=10) # Lưu khoảng cách (Z)
+                                self.h_history[obj_id] = []                  # Cập nhật danh sách H
+                                self.calibrated_H[obj_id] = None             # H chuẩn chưa có
                                 self.geom_cooldown[obj_id] = 0
                                 
-                                # Khởi tạo Kalman
-                                self.kalman_filters[obj_id] = KalmanFilter1D(1.0, 10.0, v_bottom_raw)
-                                v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom_raw)
-                                
-                                
-                                current_distance = self.estimator.estimate_ground(v_bottom_muot)
-                                H_initial = (current_distance * box_h) / self.estimator.f_y
-                                self.dist_history[obj_id].append((current_distance, H_initial))
-                                method_used = "GCP_INIT"
+                                # Khởi tạo Kalman cho chiều cao hộp (box_h)
+                                self.kalman_filters[obj_id] = KalmanFilter1D(0.1, 5.0, box_h_raw)
+                            
+                            box_h_muot = self.kalman_filters[obj_id].update(box_h_raw)
 
-                            # 3. VẬN HÀNH BÌNH THƯỜNG
-                            else: 
-                                last_dist = self.dist_history[obj_id][-1][0]
+                            # 2. GIAI ĐOẠN HIỆU CHUẨN (DƯỚI 10 FRAME)
+                            if len(self.h_history[obj_id]) < 10 and self.calibrated_H[obj_id] is None:
+                                # Tạm dùng Đường chân trời để lấy Z chuẩn ban đầu
+                                u, v_bottom_raw = self.detector.get_bottom_center(box)
+                                current_distance = self.estimator.estimate_ground(v_bottom_raw)
+                                
+                                if current_distance > 0:
+                                    # Suy ngược chiều cao vật lý thật của chiếc xe này
+                                    real_H = (current_distance * box_h_muot) / self.f_y
+                                    self.h_history[obj_id].append(real_H)
+                                    self.dist_history[obj_id].append(current_distance)
+                                
+                                method_used = f"CALIBRATING ({len(self.h_history[obj_id])}/10)"
+                                
+                                # Nếu vừa đủ 10 frame -> CHỐT SỔ CHIỀU CAO
+                                if len(self.h_history[obj_id]) == 10:
+                                    self.calibrated_H[obj_id] = sum(self.h_history[obj_id]) / 10.0
+
+                            # 3. GIAI ĐOẠN TRACKING ĐỘC LẬP (TỪ FRAME THỨ 10)
+                            else:
+                                last_dist = self.dist_history[obj_id][-1]
+                                
+                                # Dùng GEOMETRY ONLY với H ĐÃ ĐƯỢC HIỆU CHUẨN
+                                my_H = self.calibrated_H[obj_id]
+                                raw_dist_geom = (self.f_y * my_H) / box_h_muot
+                                
+                                # --- HỆ THỐNG BẮT LỖI ---
+                                is_glitch = False
+                                
+                                # Bẫy 1: Nhảy vọt
                                 dynamic_threshold = max(3.0, last_dist * 0.25)
+                                if abs(raw_dist_geom - last_dist) > dynamic_threshold:
+                                    is_glitch = True
                                 
-                                # CHÌA KHÓA: Dùng dist_super_raw để bắt quả tang YOLO nhảy vọt
-                                is_glitch = abs(dist_super_raw - last_dist) > dynamic_threshold
+                                # Bẫy 2: Lỗi rung kim (Dựa vào std của Stack)
+                                past_dists = list(self.dist_history[obj_id])
+                                deltas = [past_dists[i] - past_dists[i-1] for i in range(1, len(past_dists))]
+                                if np.std(deltas) > 1.5:
+                                    is_glitch = True
 
+                                # Kích hoạt Cooldown nếu sập bẫy
                                 if is_glitch:
                                     self.geom_cooldown[obj_id] = 3 
-                                
-                                # ĐANG TRONG BÓNG RÂM HOẶC BỊ CHE KHUẤT
+
+                                # Xử lý
                                 if self.geom_cooldown[obj_id] > 0:
-                                    past_H_values = [item[1] for item in self.dist_history[obj_id]]
-                                    avg_H = sum(past_H_values) / len(past_H_values)
-                                    
-                                    # Ép dùng thuật toán Hình học
-                                    current_distance = (self.estimator.f_y * avg_H) / box_h
+                                    current_distance = last_dist # Đóng băng khoảng cách
                                     method_used = f"GEOM_HOLD({self.geom_cooldown[obj_id]})"
                                     
-                                    # CHÌA KHÓA 2: "Tiêm Vắc-xin" cho Kalman
-                                    # Tính ngược v_bottom ảo từ current_distance để nạp cho Kalman
-                                    v_bottom_virtual = self.estimator.v_horizon + (self.estimator.f_y * self.estimator.c_h) / current_distance
-                                    self.kalman_filters[obj_id].update(v_bottom_virtual)
+                                    # Ép Kalman nhớ chiều cao hộp ảo để không bị nhiễu
+                                    box_h_virtual = (self.f_y * my_H) / current_distance
+                                    self.kalman_filters[obj_id].x = box_h_virtual 
                                     
-                                    # Lưu Stack
-                                    self.dist_history[obj_id].append((current_distance, avg_H))
                                     self.geom_cooldown[obj_id] -= 1
-                                    
-                                # XE CHẠY BÌNH THƯỜNG (Clear)
                                 else:
-                                    # Nạp dữ liệu thật vào Kalman
-                                    v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom_raw)
-                                    current_distance = self.estimator.estimate_ground(v_bottom_muot)
-                                    
-                                    H_estimated = (current_distance * box_h) / self.estimator.f_y
-                                    self.dist_history[obj_id].append((current_distance, H_estimated))
-                                    method_used = "GCP"
+                                    current_distance = raw_dist_geom
+                                    method_used = "GEOM_TRACK"
 
+                                self.dist_history[obj_id].append(current_distance)
+                            
                             if current_distance < 0: continue
                             
                             # Matching Label 
