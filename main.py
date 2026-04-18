@@ -12,6 +12,7 @@ import time
 
 MODEL_PATH = 'yolov8n_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
+GAMMA = 0.8
 
 def read_kitti_calib(calib_path):
     """
@@ -46,9 +47,10 @@ class VisionSystem:
         
         self.history = {} 
         self.kalman_filters = {}
-        self.kalman_filters_2 = {}
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
+
+        self.gamma_lut = np.array([((i / 255.0) ** 1.0 / GAMMA) * 255 for i in np.arange(0, 256)]).astype("uint8")
 
     def run(self, headless=False):
             print(f"System started. Mode: {'Headless' if headless else 'GUI'}")
@@ -59,6 +61,8 @@ class VisionSystem:
                 if frame is None: continue
                 start_inf = time.time()
 
+                frame_enhanced = cv2.LUT(frame, self.gamma_lut)
+
                 # Thiết lập hành lang
                 h_img, w_img = frame.shape[:2]
                 center_x, horizon_y = w_img // 2, int(self.c_y) - 20
@@ -67,7 +71,7 @@ class VisionSystem:
                                         [center_x + bottom_w, h_img], [center_x - bottom_w, h_img]], np.int32)
 
                 gt_objects = self.label_reader.get_gt_for_frame(frame_idx)
-                results = list(self.detector.track_objects(frame))
+                results = list(self.detector.track_objects(frame_enhanced))
 
                 if results and len(results[0].boxes) > 0:
                     for box in results[0].boxes:
