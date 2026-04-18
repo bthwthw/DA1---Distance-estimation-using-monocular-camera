@@ -94,7 +94,7 @@ class VisionSystem:
                                 self.geom_cooldown[obj_id] = 0
                                 
                                 # Khởi tạo Kalman cho chiều cao hộp (box_h)
-                                self.kalman_filters[obj_id] = KalmanFilter1D(0.1, 5.0, box_h_raw)
+                                self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, box_h_raw)
                             
                             box_h_muot = self.kalman_filters[obj_id].update(box_h_raw)
 
