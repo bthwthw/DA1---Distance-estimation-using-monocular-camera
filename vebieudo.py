@@ -72,7 +72,7 @@ def draw_comparison_chart(seq):
     plt.savefig(f'plots/comparison_chart_{seq}_4.png')
     plt.show()
 
-draw_mre_chart('final_results_4.csv')
+draw_mre_chart('final_results.csv')
 for i in range(21):
     if i == 5 or i == 8 or i == 12 or i == 14:
         continue
