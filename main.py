@@ -87,15 +87,6 @@ class VisionSystem:
                             raw_distance = self.estimator.estimate(v_bottom_muot)
                             if raw_distance < 0: continue
 
-                            # if obj_id not in self.kalman_filters_2:
-                            #     self.kalman_filters_2[obj_id] = KalmanFilter2D(
-                            #         dt=1.0/self.fps_assumed, 
-                            #         process_noise=5.0, 
-                            #         measurement_noise=0.01, 
-                            #         initial_pos=raw_distance
-                            #     )
-                            # box_w, box_h = x2 - x1, y2 - y1
-                            # current_distance = self.kalman_filters_2[obj_id].update(raw_distance, box_w, box_h)
                             current_distance = raw_distance
 
                             # Matching Label 
