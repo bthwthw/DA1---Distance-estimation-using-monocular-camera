@@ -11,7 +11,7 @@ class ObjectDetector:
         """
         persist=True: Yêu cầu YOLO nhớ ID của vật thể qua từng frame liên tiếp.
         """
-        results = self.model.track(frame, persist=True, stream=True, conf=self.conf, verbose=False)
+        results = self.model.track(frame, persist=True, stream=True, conf=self.conf, verbose=False, tracker="bytetrack.yaml")
         return results
 
     def get_bottom_center(self, box):
