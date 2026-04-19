@@ -9,10 +9,10 @@ from modules.evaluator import KittiLabelReader, calculate_iou
 from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
 import time
+import math
 
 MODEL_PATH = 'yolov8n_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
-GAMMA = 0.8
 
 def read_kitti_calib(calib_path):
     """
@@ -50,7 +50,24 @@ class VisionSystem:
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
-        self.gamma_lut = np.array([((i / 255.0) ** 1.0 / GAMMA) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    def apply_tagc(self, frame):
+        img_normalized = frame / 255.0
+        
+        mean_B = np.mean(img_normalized[:, :, 0])
+        mean_G = np.mean(img_normalized[:, :, 1])
+        mean_R = np.mean(img_normalized[:, :, 2])
+        
+        # Luminance
+        L = 0.2126 * mean_R + 0.7152 * mean_G + 0.0722 * mean_B
+        # Average color 
+        mu = (mean_R + mean_G + mean_B) / 3.0
+        # Gamma
+        gamma = 5.0 + ((0.5 - L) * (1.0 - mu)) - (2.0 * L)
+        # Apply gamma correction using a LUT
+        exponent = 2.0 / gamma 
+        lut = np.array([((i / 255.0) ** exponent) * 255 for i in range(256)]).astype("uint8")
+
+        return cv2.LUT(frame, lut)
 
     def run(self, headless=False):
             print(f"System started. Mode: {'Headless' if headless else 'GUI'}")
@@ -61,9 +78,9 @@ class VisionSystem:
                 if frame is None: continue
                 start_inf = time.time()
 
-                frame_enhanced = cv2.LUT(frame, self.gamma_lut)
+                frame_enhanced = self.apply_tagc(frame)
 
-                # Thiết lập hành lang
+                # Define corridor region
                 h_img, w_img = frame.shape[:2]
                 center_x, horizon_y = w_img // 2, int(self.c_y) - 20
                 top_w, bottom_w = 50, 250
@@ -151,14 +168,15 @@ class VisionSystem:
                 if not headless:
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)
                     cv2.imshow("Robot Vision Demo", frame)
+                    cv2.imshow("Enhanced", frame_enhanced)
                     if cv2.waitKey(1) == ord('q'): break
 
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0017' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0017.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0017.txt'
+    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0020' 
+    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0020.txt'
+    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0020.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
     
