@@ -6,13 +6,14 @@ from ultralytics import YOLO
 from ultralytics.utils.benchmarks import benchmark
 
 # model = YOLO("yolov8n.pt")
+model = YOLO('yolo11n.pt')
 # model.export(format='onnx')
-# model.export(format='openvino')
+model.export(format='openvino')
 
 # --- CẤU HÌNH ---
 # MODEL_TO_TEST = 'yolov8n.torchscript' 
 # MODEL_TO_TEST = 'yolov8n.onnx' 
-MODEL_TO_TEST = 'yolov8n_openvino_model/' 
+# MODEL_TO_TEST = 'yolo11n_openvino_model/' 
 
 def main():
     print(f"Đang load model: {MODEL_TO_TEST}...")
