@@ -39,8 +39,8 @@ def draw_mre_chart(csv_path):
     plt.grid(axis='y', linestyle=':', alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('mre_comparison_chart_tagc.png', dpi=300)
-    print("Đã xuất biểu đồ thành công: mre_comparison_chart_tagc.png")
+    plt.savefig('mre_comparison_chart_stable.png', dpi=300)
+    print("Đã xuất biểu đồ thành công: mre_comparison_chart_stable.png")
     plt.show()
 
 
@@ -69,12 +69,12 @@ def draw_comparison_chart(seq):
     plt.ylabel('Distance (meters)')
     plt.legend()
     plt.grid(True, linestyle=':', alpha=0.7)
-    plt.savefig(f'plots/comparison_chart_{seq}_tagc.png')
+    plt.savefig(f'plots/comparison_chart_{seq}_stable.png')
     plt.show()
 
-draw_mre_chart('final_results_tagc.csv')
-for i in range(21):
-    if i == 5 or i == 8 or i == 12 or i == 14:
-        continue
-    draw_comparison_chart(f"{i:04d}")
-# draw_comparison_chart('0010')
+# draw_mre_chart('final_results_stable.csv')
+# for i in range(21):
+#     if i == 5 or i == 8 or i == 12 or i == 14:
+#         continue
+#     draw_comparison_chart(f"{i:04d}")
+draw_comparison_chart('0010')

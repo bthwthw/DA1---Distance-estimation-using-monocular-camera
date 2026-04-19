@@ -8,11 +8,13 @@ from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
 from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
+from modules.stabilizer import BoundingBoxStabilizer
 import time
 import math
 
 MODEL_PATH = 'yolov8n_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
+GAMMA = 0.8
 
 def read_kitti_calib(calib_path):
     """
@@ -47,6 +49,8 @@ class VisionSystem:
         
         self.history = {} 
         self.kalman_filters = {}
+        self.box_stabilizer = BoundingBoxStabilizer()
+        self.gamma_lut = np.array([((i / 255.0) ** 1.0 / GAMMA) * 255 for i in np.arange(0, 256)]).astype("uint8")
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -78,7 +82,7 @@ class VisionSystem:
                 if frame is None: continue
                 start_inf = time.time()
 
-                frame_enhanced = self.apply_tagc(frame)
+                frame_enhanced = cv2.LUT(frame, self.gamma_lut)
 
                 # Define corridor region
                 h_img, w_img = frame.shape[:2]
@@ -101,14 +105,15 @@ class VisionSystem:
                             if cv2.pointPolygonTest(corridor_pts, (u, v_bottom), False) < 0:
                                 continue
 
-                            # Kalman & Distance
-                            if obj_id not in self.kalman_filters:
-                                self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, v_bottom)
-                            v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom)
-                            raw_distance = self.estimator.estimate(v_bottom_muot)
-                            if raw_distance < 0: continue
-
-                            current_distance = raw_distance
+                            # Apply bounding box stabilization
+                            stabilized_box = self.box_stabilizer.update(obj_id, [x1, y1, x2, y2])
+                            x1, y1, x2, y2 = map(int, stabilized_box)
+                            
+                            # Distance
+                            u = (x1 + x2) / 2
+                            v_bottom = y2
+                            current_distance = self.estimator.estimate(v_bottom)
+                            if current_distance < 0: continue
 
                             # Matching Label 
                             best_iou = 0
@@ -168,15 +173,14 @@ class VisionSystem:
                 if not headless:
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)
                     cv2.imshow("Robot Vision Demo", frame)
-                    cv2.imshow("Enhanced", frame_enhanced)
                     if cv2.waitKey(1) == ord('q'): break
 
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0020' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0020.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0020.txt'
+    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0010' 
+    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0010.txt'
+    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0010.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
     
