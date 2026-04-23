@@ -10,9 +10,9 @@ from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
 import time
 
-MODEL_PATH = 'yolov8n_openvino_model/'
+MODEL_PATH = 'yolo11n_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
-GAMMA = 0.8
+GAMMA = 0.75
 
 def read_kitti_calib(calib_path):
     """
@@ -50,7 +50,7 @@ class VisionSystem:
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
-        self.gamma_lut = np.array([((i / 255.0) ** 1.0 / GAMMA) * 255 for i in np.arange(0, 256)]).astype("uint8")
+        self.gamma_lut = np.array([((i / 255.0) ** GAMMA) * 255 for i in np.arange(0, 256)]).astype("uint8")
 
     def run(self, headless=False):
             print(f"System started. Mode: {'Headless' if headless else 'GUI'}")
@@ -87,7 +87,7 @@ class VisionSystem:
 
                             # Kalman & Distance
                             if obj_id not in self.kalman_filters:
-                                self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, v_bottom)
+                                self.kalman_filters[obj_id] = KalmanFilter1D(3.0, 3.5, v_bottom)
                             v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom)
                             raw_distance = self.estimator.estimate(v_bottom_muot)
                             if raw_distance < 0: continue
@@ -152,14 +152,15 @@ class VisionSystem:
                 if not headless:
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)
                     cv2.imshow("Robot Vision Demo", frame)
+                    cv2.imshow("Robot Vision Enhanced", frame_enhanced)
                     if cv2.waitKey(1) == ord('q'): break
 
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0017' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0017.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0017.txt'
+    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0011' 
+    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0011.txt'
+    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0011.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
     
