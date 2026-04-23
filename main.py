@@ -8,6 +8,7 @@ from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
 from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
+from modules.smoother import DistanceSmoother
 import time
 
 MODEL_PATH = 'yolo11n_openvino_model/'
@@ -47,6 +48,7 @@ class VisionSystem:
         
         self.history = {} 
         self.kalman_filters = {}
+        self.dist_smoother = DistanceSmoother()
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -62,6 +64,7 @@ class VisionSystem:
                 start_inf = time.time()
 
                 frame_enhanced = cv2.LUT(frame, self.gamma_lut)
+                # frame_enhanced = frame 
 
                 # Thiết lập hành lang
                 h_img, w_img = frame.shape[:2]
@@ -87,12 +90,13 @@ class VisionSystem:
 
                             # Kalman & Distance
                             if obj_id not in self.kalman_filters:
-                                self.kalman_filters[obj_id] = KalmanFilter1D(3.0, 3.5, v_bottom)
+                                self.kalman_filters[obj_id] = KalmanFilter1D(12.0, 0.5, v_bottom)
                             v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom)
                             raw_distance = self.estimator.estimate(v_bottom_muot)
                             if raw_distance < 0: continue
 
-                            current_distance = raw_distance
+                            current_distance = self.dist_smoother.update(obj_id, raw_distance)
+                            # current_distance = raw_distance
 
                             # Matching Label 
                             best_iou = 0
@@ -107,60 +111,60 @@ class VisionSystem:
                             else:
                                 logger.log_unmatched()
 
-                            # TTC
-                            ttc, status, color = float('inf'), "GO", (0, 255, 0)
+                            # # TTC
+                            # ttc, status, color = float('inf'), "GO", (0, 255, 0)
 
-                            if obj_id in self.history:
+                            # if obj_id in self.history:
                                 
-                                raw_v_rel = (self.history[obj_id] - current_distance) * self.fps_assumed
+                            #     raw_v_rel = (self.history[obj_id] - current_distance) * self.fps_assumed
                                 
-                                if raw_v_rel > 0.5 and current_distance < 15.0: 
-                                    ttc = current_distance / raw_v_rel
+                            #     if raw_v_rel > 0.5 and current_distance < 15.0: 
+                            #         ttc = current_distance / raw_v_rel
                                     
-                                    if ttc <= 2.5 or current_distance < 2.0: 
-                                        new_status = "STOP"
-                                        new_color = (0, 0, 255)
-                                    elif ttc <= 5.0:
-                                        new_status = "WARN"
-                                        new_color = (0, 255, 255)
-                                    else:
-                                        new_status = "GO"
-                                        new_color = (0, 255, 0)
+                            #         if ttc <= 2.5 or current_distance < 2.0: 
+                            #             new_status = "STOP"
+                            #             new_color = (0, 0, 255)
+                            #         elif ttc <= 5.0:
+                            #             new_status = "WARN"
+                            #             new_color = (0, 255, 255)
+                            #         else:
+                            #             new_status = "GO"
+                            #             new_color = (0, 255, 0)
                                         
-                                    if new_status == "STOP":
-                                        self.alert_counters[obj_id] = self.alert_counters.get(obj_id, 0) + 1
-                                    else:
-                                        self.alert_counters[obj_id] = 0
+                            #         if new_status == "STOP":
+                            #             self.alert_counters[obj_id] = self.alert_counters.get(obj_id, 0) + 1
+                            #         else:
+                            #             self.alert_counters[obj_id] = 0
                                         
-                                    if self.alert_counters.get(obj_id, 0) >= 5:
-                                        status, color = f"!!! {new_status}: {ttc:.1f}s !!!", new_color
-                                    elif new_status == "WARN":
-                                        status, color = f"{new_status}: {ttc:.1f}s", new_color
-                                else:
-                                    self.alert_counters[obj_id] = 0
+                            #         if self.alert_counters.get(obj_id, 0) >= 5:
+                            #             status, color = f"!!! {new_status}: {ttc:.1f}s !!!", new_color
+                            #         elif new_status == "WARN":
+                            #             status, color = f"{new_status}: {ttc:.1f}s", new_color
+                            #     else:
+                            #         self.alert_counters[obj_id] = 0
 
                             self.history[obj_id] = current_distance
 
                             if not headless:
-                                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+                                # cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+                                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 1)
                                 label = f"ID:{obj_id}|D:{current_distance:.1f}m|GT:{best_z_gt:.1f}m"
                                 cv2.putText(frame, label, (int(x1), int(y1-25)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
-                                cv2.putText(frame, f"Status: {status}", (int(x1), int(y1-8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                                # cv2.putText(frame, f"Status: {status}", (int(x1), int(y1-8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
                 logger.log_frame(time.time() - start_inf)
                 
                 if not headless:
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)
                     cv2.imshow("Robot Vision Demo", frame)
-                    cv2.imshow("Robot Vision Enhanced", frame_enhanced)
                     if cv2.waitKey(1) == ord('q'): break
 
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0011' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0011.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0011.txt'
+    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0016' 
+    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0016.txt'
+    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0016.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
     
