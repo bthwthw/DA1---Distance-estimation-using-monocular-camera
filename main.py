@@ -8,7 +8,7 @@ from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
 from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
-from modules.stabilizer import BoundingBoxStabilizer
+from modules.stabilizer import DistanceSmoother, BoundingBoxStabilizer, OpticalFlowStabilizer
 import time
 import math
 
@@ -49,7 +49,10 @@ class VisionSystem:
         
         self.history = {} 
         self.kalman_filters = {}
-        self.box_stabilizer = BoundingBoxStabilizer()
+        self.of_stabilizer = OpticalFlowStabilizer()
+        self.prev_gray = None
+        self.dist_smoother = DistanceSmoother()
+
         self.gamma_lut = np.array([((i / 255.0) ** 1.0 / GAMMA) * 255 for i in np.arange(0, 256)]).astype("uint8")
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
@@ -83,6 +86,9 @@ class VisionSystem:
                 start_inf = time.time()
 
                 frame_enhanced = cv2.LUT(frame, self.gamma_lut)
+                curr_gray = cv2.cvtColor(frame_enhanced, cv2.COLOR_BGR2GRAY)
+                if self.prev_gray is None:
+                    self.prev_gray = curr_gray
 
                 # Define corridor region
                 h_img, w_img = frame.shape[:2]
@@ -99,21 +105,18 @@ class VisionSystem:
                         cls_id = int(box.cls[0])
                         if cls_id in [0, 2] and box.id is not None:
                             obj_id = int(box.id[0])
-                            x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            u, v_bottom = self.detector.get_bottom_center(box)
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            u = (x1 + x2) / 2.0
+                            v_bottom = y2
                             
                             if cv2.pointPolygonTest(corridor_pts, (u, v_bottom), False) < 0:
                                 continue
 
-                            # Apply bounding box stabilization
-                            stabilized_box = self.box_stabilizer.update(obj_id, [x1, y1, x2, y2])
-                            x1, y1, x2, y2 = map(int, stabilized_box)
-                            
-                            # Distance
-                            u = (x1 + x2) / 2
-                            v_bottom = y2
-                            current_distance = self.estimator.estimate(v_bottom)
-                            if current_distance < 0: continue
+                            raw_distance = self.estimator.estimate(v_bottom)
+                            if raw_distance < 0: continue
+
+                            # Apply distance smoothing
+                            current_distance = self.dist_smoother.update(obj_id, raw_distance)
 
                             # Matching Label 
                             best_iou = 0
@@ -163,12 +166,13 @@ class VisionSystem:
                             self.history[obj_id] = current_distance
 
                             if not headless:
-                                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
                                 label = f"ID:{obj_id}|D:{current_distance:.1f}m|GT:{best_z_gt:.1f}m"
-                                cv2.putText(frame, label, (x1, y1-25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
-                                cv2.putText(frame, f"Status: {status}", (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                                cv2.putText(frame, label, (int(x1), int(y1)-25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
+                                cv2.putText(frame, f"Status: {status}", (int(x1), int(y1)-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
                 logger.log_frame(time.time() - start_inf)
+                self.prev_gray = curr_gray.copy()
                 
                 if not headless:
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)

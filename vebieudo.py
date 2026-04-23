@@ -45,7 +45,7 @@ def draw_mre_chart(csv_path):
 
 
 def draw_comparison_chart(seq):
-    df = pd.read_csv(f'logs/{seq}_details.csv')
+    df = pd.read_csv(f'logs/{seq}_details_stable.csv')
     best_id = df['obj_id'].value_counts().idxmax()
     subset = df[df['obj_id'] == best_id]
 

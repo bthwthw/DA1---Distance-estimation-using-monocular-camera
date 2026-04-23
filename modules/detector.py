@@ -13,9 +13,3 @@ class ObjectDetector:
         """
         results = self.model.track(frame, persist=True, stream=True, conf=self.conf, verbose=False, tracker="bytetrack.yaml")
         return results
-
-    def get_bottom_center(self, box):
-        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-        u = (x1 + x2) / 2.0
-        v_bottom = y2
-        return int(u), int(v_bottom)
