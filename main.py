@@ -78,8 +78,9 @@ class VisionSystem:
                         cls_id = int(box.cls[0])
                         if cls_id in [0, 2] and box.id is not None:
                             obj_id = int(box.id[0])
-                            x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            u, v_bottom = self.detector.get_bottom_center(box)
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            u = (x1 + x2) / 2.0
+                            v_bottom = y2
                             
                             if cv2.pointPolygonTest(corridor_pts, (u, v_bottom), False) < 0:
                                 continue
@@ -141,10 +142,10 @@ class VisionSystem:
                             self.history[obj_id] = current_distance
 
                             if not headless:
-                                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
                                 label = f"ID:{obj_id}|D:{current_distance:.1f}m|GT:{best_z_gt:.1f}m"
-                                cv2.putText(frame, label, (x1, y1-25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
-                                cv2.putText(frame, f"Status: {status}", (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                                cv2.putText(frame, label, (int(x1), int(y1-25)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
+                                cv2.putText(frame, f"Status: {status}", (int(x1), int(y1-8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
                 logger.log_frame(time.time() - start_inf)
                 
