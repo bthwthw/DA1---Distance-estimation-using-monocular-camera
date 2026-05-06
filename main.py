@@ -82,10 +82,8 @@ class VisionSystem:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
                             box_h_raw = y2 - y1
 
-                            # 1. KHỞI TẠO CÁC BIẾN CHO OBJ MỚI
                             if obj_id not in self.dist_history:
                                 self.dist_history[obj_id] = deque(maxlen=10) 
-                                # CHÚ Ý: Dùng deque cho h_history để làm "cửa sổ trượt"
                                 self.h_history[obj_id] = deque(maxlen=10)    
                                 self.calibrated_H[obj_id] = None             
                                 self.geom_cooldown[obj_id] = 0
@@ -103,7 +101,6 @@ class VisionSystem:
                             my_H = self.calibrated_H[obj_id] if self.calibrated_H[obj_id] else 1.52
                             raw_dist_geom = (self.f_y * my_H) / box_h_muot
 
-                            # 2. HỆ THỐNG KIỂM SOÁT LỖI (ANOMALY DETECTOR)
                             is_glitch = False
                             if len(self.dist_history[obj_id]) > 0:
                                 last_dist = self.dist_history[obj_id][-1]
@@ -111,12 +108,10 @@ class VisionSystem:
                                 # Chọn khoảng cách để check lỗi tùy theo trạng thái
                                 check_dist = raw_dist_geom if self.calibrated_H[obj_id] else raw_dist_gcp
                                 
-                                # Bẫy 1: Nhảy vọt > 25%
                                 dynamic_threshold = max(3.0, last_dist * 0.25)
                                 if abs(check_dist - last_dist) > dynamic_threshold:
                                     is_glitch = True
                                 
-                                # Bẫy 2: Rung kim (Dựa vào std của Stack khoảng cách)
                                 if len(self.dist_history[obj_id]) >= 4:
                                     past_dists = list(self.dist_history[obj_id])
                                     deltas = [past_dists[i] - past_dists[i-1] for i in range(1, len(past_dists))]
@@ -126,13 +121,11 @@ class VisionSystem:
                             if is_glitch:
                                 self.geom_cooldown[obj_id] = 3 
 
-                            # 3. ĐƯA RA QUYẾT ĐỊNH XỬ LÝ
                             if self.geom_cooldown[obj_id] > 0:
                                 # ĐANG BỊ LỖI (CHATTERING / OCCLUSION)
                                 current_distance = self.dist_history[obj_id][-1] if len(self.dist_history[obj_id])>0 else raw_dist_geom
                                 method_used = f"HOLD({self.geom_cooldown[obj_id]})"
                                 
-                                # Xóa sạch lịch sử H vì chuỗi quan sát ổn định đã bị đứt gãy!
                                 self.h_history[obj_id].clear()
                                 
                                 # Ép Kalman đứng im
@@ -142,7 +135,6 @@ class VisionSystem:
                                 self.geom_cooldown[obj_id] -= 1
                                 
                             else:
-                                # ĐANG QUAN SÁT TỐT (KHÔNG LỖI)
                                 if self.calibrated_H[obj_id] is None:
                                     # Giai đoạn Hiệu chuẩn: Đo bằng GCP
                                     current_distance = raw_dist_gcp
@@ -153,21 +145,16 @@ class VisionSystem:
                                         
                                     method_used = f"CALIB ({len(self.h_history[obj_id])}/10)"
                                     
-                                    # TƯ DUY CỦA THU: Kiểm định độ tin cậy của 10 frame
                                     if len(self.h_history[obj_id]) == 10:
                                         h_std = np.std(self.h_history[obj_id])
                                         
-                                        # Ngưỡng lệch chuẩn: 0.15m (15 cm). 
-                                        # Chiều cao xe không thay đổi, nếu lệch < 15cm là cực kỳ chuẩn!
+                                        # Ngưỡng lệch chuẩn: 0.15m
                                         if h_std < 0.15: 
                                             self.calibrated_H[obj_id] = np.mean(self.h_history[obj_id])
                                         else:
-                                            # Bị nhiễu nhẹ. Không chốt! 
-                                            # Vì h_history là deque, frame cũ nhất sẽ rớt ra ở vòng sau, 
-                                            # hệ thống tự động tìm cửa sổ 10 frame mượt nhất.
                                             method_used = f"NOISY (std:{h_std:.2f})"
                                 else:
-                                    # Giai đoạn Tracking: Xài GEOMETRY 100%
+                                    # Giai đoạn Tracking: Xài GEOMETRY 
                                     current_distance = raw_dist_geom
                                     method_used = "GEOM_TRACK"
 
