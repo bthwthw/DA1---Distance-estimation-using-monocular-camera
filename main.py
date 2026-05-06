@@ -107,7 +107,7 @@ class VisionSystem:
                                     best_iou, best_z_gt = iou, gt_obj['z_gt']
                             
                             if best_iou > 0.5:
-                                logger.log_match(frame_idx, obj_id, current_distance, best_z_gt, best_iou)
+                                logger.log_match(frame_idx, cls_id, obj_id, current_distance, best_z_gt, best_iou)
                             else:
                                 logger.log_unmatched()
 

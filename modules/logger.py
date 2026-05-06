@@ -31,7 +31,7 @@ class SystemLogger:
     def log_frame(self, inf_time):
         self.inference_times.append(inf_time)
 
-    def log_match(self, frame_idx, obj_id, dist_pred, dist_gt, iou):
+    def log_match(self, frame_idx, cls_id, obj_id, dist_pred, dist_gt, iou):
         """Log matched object details"""
         error = abs(dist_pred - dist_gt)
         percent_error = (error / dist_gt) * 100
@@ -42,7 +42,7 @@ class SystemLogger:
         
         with open(self.detail_file, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([frame_idx, obj_id, round(dist_gt, 3), round(dist_pred, 3), round(percent_error, 2), round(iou, 2)])
+            writer.writerow([frame_idx, cls_id, obj_id, round(dist_gt, 3), round(dist_pred, 3), round(percent_error, 2), round(iou, 2)])
 
     def log_unmatched(self):
         self.total_yolo_boxes += 1
