@@ -3,7 +3,7 @@ import cv2
 from collections import deque
 
 class DistanceSmoother:
-    def __init__(self, window_size=5, alpha=0.4):
+    def __init__(self, window_size=5, alpha=0.5):
         '''
         window_size: median filter size, odd integer >= 3
         alpha: EMA smoothing factor (0.0 - 1.0)

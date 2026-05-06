@@ -8,7 +8,7 @@ from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
 from modules.kalman import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
-from modules.smoother import DistanceSmoother
+from modules.smoother import DistanceSmoother, BoundingBoxStabilizer
 import time
 
 MODEL_PATH = 'yolo11n_openvino_model/'
@@ -49,6 +49,7 @@ class VisionSystem:
         self.history = {} 
         self.kalman_filters = {}
         self.dist_smoother = DistanceSmoother()
+        self.bbox_stabilizer = BoundingBoxStabilizer()
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -82,9 +83,14 @@ class VisionSystem:
                         if cls_id in [0, 2] and box.id is not None:
                             obj_id = int(box.id[0])
                             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            box_ = [x1, y1, x2, y2]
+                            
+                            # Stabilize bounding box
+                            stable_box = self.bbox_stabilizer.update(obj_id, box_)
+                            x1, y1, x2, y2 = stable_box
                             u = (x1 + x2) / 2.0
                             v_bottom = y2
-                            
+
                             if cv2.pointPolygonTest(corridor_pts, (u, v_bottom), False) < 0:
                                 continue
 
@@ -95,8 +101,8 @@ class VisionSystem:
                             raw_distance = self.estimator.estimate(v_bottom_muot)
                             if raw_distance < 0: continue
 
-                            current_distance = self.dist_smoother.update(obj_id, raw_distance)
-                            # current_distance = raw_distance
+                            # current_distance = self.dist_smoother.update(obj_id, raw_distance)
+                            current_distance = raw_distance
 
                             # Matching Label 
                             best_iou = 0
@@ -162,9 +168,9 @@ class VisionSystem:
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0016' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0016.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0016.txt'
+    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0019' 
+    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0019.txt'
+    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0019.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
     
