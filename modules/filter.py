@@ -93,3 +93,30 @@ class KalmanFilter2D:
             self.x[1, 0] = x_prior[1, 0] + np.sign(v_diff) * max_v_change
 
         return float(self.x[0, 0])
+    
+class DistanceSmoother:
+    def __init__(self, ema_alpha=0.25, median_window=3):
+        """
+        :param ema_alpha:     Hệ số EMA (0 < alpha < 1).
+        :param median_window: Kích thước cửa sổ median (số lẻ, >= 3).
+        """
+        assert median_window % 2 == 1 and median_window >= 3, "median_window must be odd >= 3"
+        self.alpha = ema_alpha
+        self.win = median_window
+        self._buf = []       # buffer cho median
+        self._ema = None     # giá trị EMA hiện tại
+
+    def update(self, distance: float) -> float:
+        # Median 
+        self._buf.append(distance)
+        if len(self._buf) > self.win:
+            self._buf.pop(0)
+        median_val = sorted(self._buf)[len(self._buf) // 2]
+
+        # EMA 
+        if self._ema is None:
+            self._ema = median_val          # khởi tạo lần đầu = giá trị đầu tiên
+        else:
+            self._ema = self.alpha * median_val + (1 - self.alpha) * self._ema
+
+        return self._ema

@@ -6,7 +6,7 @@ import numpy as np
 from modules.detector import ObjectDetector
 from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
-from modules.kalman import KalmanFilter1D, KalmanFilter2D
+from modules.filter import KalmanFilter1D, KalmanFilter2D, DistanceSmoother
 from modules.logger import SystemLogger
 import time
 
@@ -47,6 +47,7 @@ class VisionSystem:
         self.history = {} 
         self.kalman_filters = {}
         self.kalman_filters_2 = {}
+        self.dist_smoothers = {}    # Lọc distance 2 tầng (Median → EMA)
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -96,7 +97,10 @@ class VisionSystem:
                             #     )
                             # box_w, box_h = x2 - x1, y2 - y1
                             # current_distance = self.kalman_filters_2[obj_id].update(raw_distance, box_w, box_h)
-                            current_distance = raw_distance
+                            # Lọc 2 tầng trên miền distance: Median(w=3) → EMA(α=0.25)
+                            if obj_id not in self.dist_smoothers:
+                                self.dist_smoothers[obj_id] = DistanceSmoother(ema_alpha=0.25, median_window=3)
+                            current_distance = self.dist_smoothers[obj_id].update(raw_distance)
 
                             # Matching Label 
                             best_iou = 0
@@ -166,4 +170,3 @@ if __name__ == "__main__":
     LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0017.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
-    

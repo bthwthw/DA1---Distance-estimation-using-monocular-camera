@@ -19,7 +19,7 @@ for seq in sequences:
         print(f"\n>>> Set: {seq}...")
         try:
             app = VisionSystem(img_dir, calib_file, label_file)
-            app.run(headless=False) 
+            app.run(headless=True) 
         except Exception as e:
             print(f"[ERROR] set {seq}: {e}")
     else:
