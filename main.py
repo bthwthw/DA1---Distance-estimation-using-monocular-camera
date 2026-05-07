@@ -121,6 +121,8 @@ class VisionSystem:
                                 self.dist_smoothers[obj_id] = DistanceSmoother(ema_alpha=0.25, median_window=3)
                             current_distance = self.dist_smoothers[obj_id].update(raw_distance)
 
+                            if current_distance > 40: continue
+
                             # Matching Label 
                             best_iou = 0
                             best_z_gt = -1
