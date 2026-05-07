@@ -12,7 +12,7 @@ class SystemLogger:
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
             
-        self.detail_file = os.path.join(self.log_dir, f"2_{sequence_name}_details.csv")
+        self.detail_file = os.path.join(self.log_dir, f"3_{sequence_name}_details.csv")
         self._init_detail_file()
 
         # Thống kê tổng hợp
@@ -65,7 +65,7 @@ class SystemLogger:
             'miss_rate': round((self.unmatched_boxes / self.total_yolo_boxes)*100, 2) if self.total_yolo_boxes > 0 else 0
         }
 
-    def save_csv(self, filename="final_results_2.csv"):
+    def save_csv(self, filename="final_results_3.csv"):
         s = self.get_summary()
         file_exists = os.path.isfile(filename)
         with open(filename, 'a', newline='') as f:

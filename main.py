@@ -14,17 +14,34 @@ MODEL_PATH = 'yolov8n_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
 
 def read_kitti_calib(calib_path):
-    """
-    Đọc file txt của KITTI, trích xuất F_y và C_y từ ma trận P2 
-    """
+    """Đọc file calib KITTI, trả về f_y, c_y, v_horizon tính đúng từ pitch."""
+    P2 = R_rect = Tr = None
     with open(calib_path, 'r') as f:
         for line in f:
             if line.startswith('P2:'):
-                values = [float(x) for x in line.strip().split()[1:]]
-                f_y = values[5] # Tiêu cự trục dọc
-                c_y = values[6] # Tọa độ đường chân trời
-                return f_y, c_y
-    return None, None
+                P2 = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
+            elif line.startswith('R_rect'):
+                R_rect = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 3)
+            elif line.startswith('Tr_velo_cam'):
+                Tr = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
+
+    f_y = P2[1, 1]
+    c_y = P2[1, 2]
+
+    # Ground normal trong velo frame = [0, 0, 1] (Z_velo = hướng lên)
+    n_velo = np.array([0.0, 0.0, 1.0])
+    n_cam = R_rect @ Tr[:, :3] @ n_velo
+    n_cam /= np.linalg.norm(n_cam)
+
+    # Pitch = angle của optical axis (Z_cam=[0,0,1]) với mặt phẳng ngang
+    pitch_rad = np.arcsin(float(np.dot([0.0, 0.0, 1.0], n_cam)))
+
+    # v_horizon = c_y - f_y * tan(pitch)
+    # pitch > 0 (nhìn lên): horizon thấp hơn c_y
+    # pitch < 0 (nhìn xuống nhẹ): horizon cao hơn c_y (đúng với dashcam)
+    v_horizon = c_y - f_y * np.tan(pitch_rad)
+
+    return f_y, c_y, v_horizon
 
 class VisionSystem:
     def __init__(self, sequence_dir, calib_file, label_file):
@@ -35,11 +52,12 @@ class VisionSystem:
 
         """
         self.sequence_dir = sequence_dir
-        self.f_y, self.c_y = read_kitti_calib(calib_file)
+        
+        self.f_y, self.c_y, v_horizon = read_kitti_calib(calib_file)
+        self.estimator = DistanceEstimator(self.f_y, CAMERA_HEIGHT, v_horizon)
         
         self.detector = ObjectDetector(model_path=MODEL_PATH)
         self.alert_counters = {} 
-        self.estimator = DistanceEstimator(self.f_y, CAMERA_HEIGHT, self.c_y)
         self.label_reader = KittiLabelReader(label_file)
 
         self.image_paths = sorted(glob.glob(os.path.join(sequence_dir, '*.png')))
