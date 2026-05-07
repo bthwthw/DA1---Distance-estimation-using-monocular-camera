@@ -8,6 +8,8 @@ from ultralytics.utils.benchmarks import benchmark
 # model = YOLO("yolov8n.pt")
 # model.export(format='onnx')
 # model.export(format='openvino')
+model = YOLO("yolov8n-seg.pt")
+model.export(format='openvino')
 
 # --- CẤU HÌNH ---
 # MODEL_TO_TEST = 'yolov8n.torchscript' 

@@ -3,7 +3,7 @@ import numpy as np
 import random
 
 class HorizonDetector:
-    def __init__(self, default_horizon=200, roi_top_pct=0.6, ransac_iters=500, inlier_thresh=10.0):
+    def __init__(self, default_horizon=200, roi_top_pct=0.6, ransac_iters=1000, inlier_thresh=10.0):
         """
         :param ransac_iters: Số vòng lặp lấy mẫu ngẫu nhiên. Càng cao càng chính xác nhưng chậm hơn.
         :param inlier_thresh: Ngưỡng khoảng cách vuông góc (pixel) để coi một đường thẳng là inlier.

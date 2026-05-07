@@ -11,7 +11,7 @@ from modules.logger import SystemLogger
 from modules.horizon import HorizonDetector
 import time
 
-MODEL_PATH = 'yolov8n_openvino_model/'
+MODEL_PATH = 'yolov8n-seg_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
 
 def read_kitti_calib(calib_path):
@@ -63,7 +63,6 @@ class VisionSystem:
 
                 if frame_idx % 3 == 0: 
                     measured_horizon = self.horizon_detector.detect(frame)
-                    
                     if measured_horizon is not None:
                         innovation = abs(measured_horizon - self.kf_horizon.x)
                         self.kf_horizon.predict()
@@ -90,13 +89,18 @@ class VisionSystem:
                 results = list(self.detector.track_objects(frame))
 
                 if results and len(results[0].boxes) > 0:
-                    for box in results[0].boxes:
+                    masks = results[0].masks
+                    for i, box in enumerate(results[0].boxes):
                         cls_id = int(box.cls[0])
                         if cls_id in [0, 2] and box.id is not None:
                             obj_id = int(box.id[0])
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            u, v_bottom = self.detector.get_bottom_center(box)
-                            
+                            mask_contour = None
+                            if masks is not None and len(masks.xy) > i:
+                                mask_contour = masks.xy[i] 
+                                
+                            # Truyền cả box và mask vào hàm detector
+                            u, v_bottom = self.detector.get_bottom_center(box, mask_contour)
                             if cv2.pointPolygonTest(corridor_pts, (u, v_bottom), False) < 0:
                                 continue
 
@@ -171,10 +175,20 @@ class VisionSystem:
                             self.history[obj_id] = current_distance
 
                             if not headless:
-                                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                                 label = f"ID:{obj_id}|D:{current_distance:.1f}m|GT:{best_z_gt:.1f}m"
                                 cv2.putText(frame, label, (x1, y1-25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
                                 cv2.putText(frame, f"Status: {status}", (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                            
+                                if mask_contour is not None and len(mask_contour) > 0:
+                                    pts = np.array(mask_contour, np.int32)
+                                    pts = pts.reshape((-1, 1, 2))
+                                    overlay = frame.copy()
+                                    cv2.fillPoly(overlay, [pts], color) 
+                                    frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0)
+                                    cv2.polylines(frame, [pts], True, color, 2)
+
+                                else:
+                                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
                 logger.log_frame(time.time() - start_inf)
                 
@@ -184,11 +198,15 @@ class VisionSystem:
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)
                     cv2.imshow("Robot Vision Demo", frame)
                     if cv2.waitKey(1) == ord('q'): break
+                
+                else:
+                    time.sleep(0.001)
+
 
             logger.save_csv()
 
 if __name__ == "__main__":
-    seq = '0001'
+    seq = '0020'
     IMG_DIR = f'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/{seq}' 
     CALIB_FILE = f'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/{seq}.txt'
     LABEL_FILE = f'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/{seq}.txt'
