@@ -7,7 +7,7 @@ import os
 
 # 1. Tìm tất cả các file CSV của phiên bản RANSAC (có tiền tố 4_)
 # Nếu bạn muốn phân tích các file không dùng RANSAC, đổi thành '2_*_details.csv' hoặc '*_details.csv'
-file_pattern = '4_*_details.csv'
+file_pattern = 'logs/6_*_details.csv'
 all_files = sorted(glob.glob(file_pattern))
 
 if not all_files:
@@ -17,7 +17,15 @@ if not all_files:
 print(f"Đang xử lý tổng cộng {len(all_files)} file CSV...")
 
 # 2. Đọc và gộp tất cả các file thành một DataFrame duy nhất
-df_list = [pd.read_csv(f) for f in all_files]
+df_list = []
+for f in all_files:
+    temp_df = pd.read_csv(f)
+    # Lưu tên file (chỉ lấy tên, bỏ qua đường dẫn dài)
+    temp_df['source_file'] = os.path.basename(f)
+    # Lưu số dòng trong CSV: index bắt đầu từ 0 + 2 (1 cho header, 1 để khớp dòng thực tế)
+    temp_df['csv_line_number'] = temp_df.index + 2 
+    df_list.append(temp_df)
+
 df = pd.concat(df_list, ignore_index=True)
 
 # 3. Tính toán các cột sai số
@@ -28,8 +36,8 @@ df['abs_error'] = (df['dist_pred'] - df['dist_gt']).abs()
 df['error_pct'] = (df['abs_error'] / df['dist_gt']) * 100
 
 # 4. Phân vùng khoảng cách (Zoning/Binning)
-bins = [0, 10, 20, 30, 40, 50, 60, 100]
-labels = ['0-10m', '10-20m', '20-30m', '30-40m', '40-50m', '50-60m', '60m+']
+bins = [0, 10, 20, 30, 40, 50]
+labels = ['0-10m', '10-20m', '20-30m', '30-40m', '40-50m']
 # right=False nghĩa là lấy [0, 10), [10, 20)
 df['dist_bin'] = pd.cut(df['dist_gt'], bins=bins, labels=labels, right=False)
 
@@ -52,6 +60,36 @@ print(agg_df_rounded.to_string())
 agg_csv_name = 'final_ransac_aggregated_error_stats.csv'
 agg_df.to_csv(agg_csv_name, index=False)
 print(f"\nĐã lưu bảng thống kê vào file: {agg_csv_name}")
+
+# Lấy danh sách các dải khoảng cách đã định nghĩa ở bước 4
+unique_bins = df['dist_bin'].dropna().unique()
+# Sắp xếp lại cho đúng thứ tự từ gần đến xa
+unique_bins = sorted(unique_bins, key=lambda x: float(x.split('-')[0])) 
+
+outliers_list = []
+columns_to_print = ['source_file', 'csv_line_number', 'dist_gt', 'dist_pred', 'abs_error', 'error_pct']
+
+for bin_label in unique_bins:
+    # Lọc dữ liệu thuộc dải hiện tại
+    bin_df = df[df['dist_bin'] == bin_label]
+    
+    if bin_df.empty:
+        continue
+        
+    # Sắp xếp để lấy các ca có sai số tuyệt đối cao nhất
+    worst_cases = bin_df.sort_values(by='abs_error', ascending=False).head(10)
+    outliers_list.append(worst_cases)
+    
+    print(f"\n--- TOP 10 LỖI NẶNG NHẤT DẢI {bin_label} ---")
+    # Tùy chỉnh format in ra cho gọn, làm tròn 2 chữ số thập phân
+    print(worst_cases[columns_to_print].round(2).to_string(index=False))
+
+# Gộp tất cả outliers của các dải lại và lưu ra file CSV
+if outliers_list:
+    final_outliers_df = pd.concat(outliers_list)
+    outliers_csv_name = 'outliers_by_distance_bins.csv'
+    final_outliers_df.to_csv(outliers_csv_name, index=False)
+    print(f"\n=> Đã xuất toàn bộ danh sách phân loại ra file: {outliers_csv_name}")
 
 # ==========================================
 # 6. VẼ BIỂU ĐỒ (VISUALIZATION)
