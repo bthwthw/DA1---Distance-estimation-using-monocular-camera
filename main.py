@@ -8,40 +8,20 @@ from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
 from modules.filter import KalmanFilter1D, KalmanFilter2D, DistanceSmoother
 from modules.logger import SystemLogger
+from modules.horizon import HorizonDetector
 import time
 
 MODEL_PATH = 'yolov8n_openvino_model/'
 CAMERA_HEIGHT = 1.65  # Vị trí camera theo kitti 
 
 def read_kitti_calib(calib_path):
-    """Đọc file calib KITTI, trả về f_y, c_y, v_horizon tính đúng từ pitch."""
-    P2 = R_rect = Tr = None
     with open(calib_path, 'r') as f:
         for line in f:
             if line.startswith('P2:'):
-                P2 = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
-            elif line.startswith('R_rect'):
-                R_rect = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 3)
-            elif line.startswith('Tr_velo_cam'):
-                Tr = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
-
-    f_y = P2[1, 1]
-    c_y = P2[1, 2]
-
-    # Ground normal trong velo frame = [0, 0, 1] (Z_velo = hướng lên)
-    n_velo = np.array([0.0, 0.0, 1.0])
-    n_cam = R_rect @ Tr[:, :3] @ n_velo
-    n_cam /= np.linalg.norm(n_cam)
-
-    # Pitch = angle của optical axis (Z_cam=[0,0,1]) với mặt phẳng ngang
-    pitch_rad = np.arcsin(float(np.dot([0.0, 0.0, 1.0], n_cam)))
-
-    # v_horizon = c_y - f_y * tan(pitch)
-    # pitch > 0 (nhìn lên): horizon thấp hơn c_y
-    # pitch < 0 (nhìn xuống nhẹ): horizon cao hơn c_y (đúng với dashcam)
-    v_horizon = c_y - f_y * np.tan(pitch_rad)
-
-    return f_y, c_y, v_horizon
+                values = [float(x) for x in line.strip().split()[1:]]
+                f_y = values[5]
+                c_y = values[6]
+                return f_y, c_y
 
 class VisionSystem:
     def __init__(self, sequence_dir, calib_file, label_file):
@@ -52,16 +32,19 @@ class VisionSystem:
 
         """
         self.sequence_dir = sequence_dir
-        
-        self.f_y, self.c_y, v_horizon = read_kitti_calib(calib_file)
-        self.estimator = DistanceEstimator(self.f_y, CAMERA_HEIGHT, v_horizon)
+        self.f_y, self.c_y = read_kitti_calib(calib_file)
+
+        self.horizon_detector = HorizonDetector()
+        self.kf_horizon = KalmanFilter1D(process_variance=1.0, measurement_variance=10.0, initial_state=self.c_y)
+        self.current_v_horizon = self.c_y
+        self.estimator = DistanceEstimator(self.f_y, CAMERA_HEIGHT, self.current_v_horizon)
         
         self.detector = ObjectDetector(model_path=MODEL_PATH)
         self.alert_counters = {} 
-        self.label_reader = KittiLabelReader(label_file)
-
-        self.image_paths = sorted(glob.glob(os.path.join(sequence_dir, '*.png')))
         
+        self.label_reader = KittiLabelReader(label_file)
+        self.image_paths = sorted(glob.glob(os.path.join(sequence_dir, '*.png')))
+
         self.history = {} 
         self.kalman_filters = {}
         self.kalman_filters_2 = {}
@@ -77,6 +60,24 @@ class VisionSystem:
                 frame = cv2.imread(img_path)
                 if frame is None: continue
                 start_inf = time.time()
+
+                if frame_idx % 3 == 0: 
+                    measured_horizon = self.horizon_detector.detect(frame)
+                    
+                    if measured_horizon is not None:
+                        innovation = abs(measured_horizon - self.kf_horizon.x)
+                        self.kf_horizon.predict()
+                        if innovation < 5.0:
+                            self.kf_horizon.update(measured_horizon)
+                        else:
+                            pass 
+                        self.current_v_horizon = self.kf_horizon.x
+                    else:
+                        self.kf_horizon.predict()
+                        self.current_v_horizon = self.kf_horizon.x
+                self.current_v_horizon = np.clip(self.current_v_horizon, self.c_y - 10, self.c_y + 10)
+                # self.current_v_horizon = self.c_y
+                self.estimator.v_horizon = self.current_v_horizon
 
                 # Thiết lập hành lang
                 h_img, w_img = frame.shape[:2]
@@ -176,6 +177,8 @@ class VisionSystem:
                 logger.log_frame(time.time() - start_inf)
                 
                 if not headless:
+                    cv2.line(frame, (0, int(self.current_v_horizon)), (w_img, int(self.current_v_horizon)), (0, 0, 255), 2)
+                    cv2.line(frame, (0, int(self.c_y)), (w_img, int(self.c_y)), (0, 255, 0), 2)
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)
                     cv2.imshow("Robot Vision Demo", frame)
                     if cv2.waitKey(1) == ord('q'): break
@@ -183,8 +186,9 @@ class VisionSystem:
             logger.save_csv()
 
 if __name__ == "__main__":
-    IMG_DIR = 'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/0017' 
-    CALIB_FILE = 'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/0017.txt'
-    LABEL_FILE = 'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/0017.txt'
+    seq = '0001'
+    IMG_DIR = f'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/{seq}' 
+    CALIB_FILE = f'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/{seq}.txt'
+    LABEL_FILE = f'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/{seq}.txt'
     app = VisionSystem(IMG_DIR, CALIB_FILE, LABEL_FILE)
     app.run()
