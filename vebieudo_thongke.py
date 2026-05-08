@@ -6,8 +6,8 @@ import numpy as np
 import os
 
 # 1. Tìm tất cả các file CSV của phiên bản RANSAC (có tiền tố 4_)
-# Nếu bạn muốn phân tích các file không dùng RANSAC, đổi thành '2_*_details.csv' hoặc '*_details.csv'
-file_pattern = 'logs/6_*_details.csv'
+# Nếu bạn muốn phân tích các file không dùng RANSAC, đổi thành '2_*_details_1.csv' hoặc '*_details_1.csv'
+file_pattern = 'logs/1_*_details.csv'
 all_files = sorted(glob.glob(file_pattern))
 
 if not all_files:
@@ -57,7 +57,7 @@ print("\n=== Final Error Statistics by Distance Range (RANSAC version) ===")
 print(agg_df_rounded.to_string())
 
 # Lưu bảng thống kê này ra file CSV để làm báo cáo
-agg_csv_name = 'final_ransac_aggregated_error_stats.csv'
+agg_csv_name = 'final_ransac_aggregated_error_stats_1.csv'
 agg_df.to_csv(agg_csv_name, index=False)
 print(f"\nĐã lưu bảng thống kê vào file: {agg_csv_name}")
 
@@ -87,7 +87,7 @@ for bin_label in unique_bins:
 # Gộp tất cả outliers của các dải lại và lưu ra file CSV
 if outliers_list:
     final_outliers_df = pd.concat(outliers_list)
-    outliers_csv_name = 'outliers_by_distance_bins.csv'
+    outliers_csv_name = 'outliers_by_distance_bins_1_1.csv'
     final_outliers_df.to_csv(outliers_csv_name, index=False)
     print(f"\n=> Đã xuất toàn bộ danh sách phân loại ra file: {outliers_csv_name}")
 
@@ -117,7 +117,7 @@ plt.xticks(rotation=45) # Nghiêng nhãn trục X 45 độ cho khỏi đè lên 
 
 # Căn chỉnh bố cục và Lưu file ảnh
 plt.tight_layout()
-plot_img_name = 'final_ransac_error_analysis.png'
+plot_img_name = 'final_ransac_error_analysis_1.png'
 plt.savefig(plot_img_name, dpi=300) # Lưu với độ phân giải cao (300dpi) để dán vào Word
 print(f"Đã lưu biểu đồ vào file: {plot_img_name}")
 
