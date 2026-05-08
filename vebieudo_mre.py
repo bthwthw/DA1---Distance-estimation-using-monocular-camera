@@ -45,7 +45,7 @@ def draw_mre_chart(csv_path):
 
 
 def draw_comparison_chart(seq):
-    df = pd.read_csv(f'logs/1_{seq}_details.csv')
+    df = pd.read_csv(f'logs/6_{seq}_details.csv')
     best_id = df['obj_id'].value_counts().idxmax()
     subset = df[df['obj_id'] == best_id]
 
@@ -72,9 +72,9 @@ def draw_comparison_chart(seq):
     plt.savefig(f'plots/6_comparison_chart_{seq}.png')
     plt.show()
 
-draw_mre_chart('final_results_1.csv')
-# for i in range(21):
-#     if i == 5 or i == 8 or i == 12 or i == 14 or i == 17:
-#         continue
-#     draw_comparison_chart(f"{i:04d}")
+# draw_mre_chart('final_results_1.csv')
+for i in range(21):
+    if i == 5 or i == 8 or i == 12 or i == 14 or i == 17:
+        continue
+    draw_comparison_chart(f"{i:04d}")
     
