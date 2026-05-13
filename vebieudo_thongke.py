@@ -40,7 +40,7 @@ agg_df = df.groupby('dist_bin', observed=False).agg(
 ).reset_index()
 
 agg_df_rounded = agg_df.round(2)
-print("\n=== Final Error Statistics by Distance Range (RANSAC version) ===")
+print("\n=== Final Error Statistics by Distance Range ===")
 print(agg_df_rounded.to_string())
 
 agg_csv_name = 'final_aggregated_error_stats_4.csv'
@@ -78,7 +78,7 @@ plt.figure(figsize=(15, 6))
 
 plt.subplot(1, 2, 1)
 sns.scatterplot(data=df, x='dist_gt', y='abs_error', alpha=0.5, color='purple', s=15)
-plt.title('Absolute Error vs Ground Truth (no RANSAC - 16 seqs)', fontsize=14, pad=15)
+plt.title('Absolute Error vs Ground Truth (16 seqs)', fontsize=14, pad=15)
 plt.xlabel('Ground Truth Distance (m)', fontsize=12)
 plt.ylabel('Absolute Error (m)', fontsize=12)
 plt.grid(True, linestyle='--', alpha=0.7)
