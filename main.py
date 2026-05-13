@@ -47,6 +47,7 @@ class VisionSystem:
         self.history = {} 
         self.kalman_filters = {}
         self.kalman_filters_2 = {}
+        self.last_valid_v_bottom = {}
 
         self.fps_assumed = 10.0 # dataset kitti 10fps 
 
@@ -75,21 +76,35 @@ class VisionSystem:
                         if cls_id in [0, 2] and box.id is not None:
                             obj_id = int(box.id[0])
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            box_h = y2 - y1
                             
-                            u, v_bottom = self.estimator.refine_v_bottom(frame, x1, y1, x2, y2)
-                            if not headless:
-                                cv2.circle(frame, (u, v_bottom), 3, (0, 0, 255), -1)
+                            u, current_v_bottom = self.estimator.refine_v_bottom(frame, x1, y1, x2, y2)
+
+                            # if obj_id in self.last_valid_v_bottom:
+                            #     prev_v = self.last_valid_v_bottom[obj_id]
+                            #     max_jump = int(box_h * 0.05) 
+                                
+                            #     if abs(current_v_bottom - prev_v) > max_jump:
+                            #         if current_v_bottom > prev_v:
+                            #             current_v_bottom = prev_v + max_jump
+                            #         else:
+                            #             current_v_bottom = prev_v - max_jump
+                            # self.last_valid_v_bottom[obj_id] = current_v_bottom
 
                             # x1, y1, x2, y2 = map(int, box.xyxy[0])
                             # u, v_bottom = self.detector.get_bottom_center(box)
                             
-                            if cv2.pointPolygonTest(corridor_pts, (u, v_bottom), False) < 0:
+                            if cv2.pointPolygonTest(corridor_pts, (u, current_v_bottom), False) < 0:
                                 continue
 
                             # Kalman & Distance
                             if obj_id not in self.kalman_filters:
-                                self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, v_bottom)
-                            v_bottom_muot = self.kalman_filters[obj_id].update(v_bottom)
+                                self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, current_v_bottom)
+                            v_bottom_muot = self.kalman_filters[obj_id].update(current_v_bottom)
+
+                            if not headless:
+                                cv2.circle(frame, (int(u), int(v_bottom_muot)), 3, (0, 255, 0), -1)
+
                             raw_distance = self.estimator.estimate_ground(v_bottom_muot)
                             if raw_distance < 0: continue
 
@@ -169,7 +184,7 @@ class VisionSystem:
             logger.save_csv()
 
 if __name__ == "__main__":
-    seq = '0010'
+    seq = '0007'
     IMG_DIR = f'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/{seq}' 
     CALIB_FILE = f'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/{seq}.txt'
     LABEL_FILE = f'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/{seq}.txt'
