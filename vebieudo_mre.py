@@ -39,13 +39,13 @@ def draw_mre_chart(csv_path):
     plt.grid(axis='y', linestyle=':', alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('mre_comparison_chart.png', dpi=300)
-    print("Đã xuất biểu đồ thành công: mre_comparison_chart.png")
+    plt.savefig('3_mre_comparison_chart.png', dpi=300)
+    print("Đã xuất biểu đồ thành công: 3_mre_comparison_chart.png")
     plt.show()
 
 
 def draw_comparison_chart(seq):
-    df = pd.read_csv(f'logs/{seq}_details_4.csv')
+    df = pd.read_csv(f'logs/3_{seq}_details.csv')
     best_id = df['obj_id'].value_counts().idxmax()
     subset = df[df['obj_id'] == best_id]
 
@@ -69,12 +69,12 @@ def draw_comparison_chart(seq):
     plt.ylabel('Distance (meters)')
     plt.legend()
     plt.grid(True, linestyle=':', alpha=0.7)
-    plt.savefig(f'plots/comparison_chart_{seq}_4.png')
+    plt.savefig(f'plots/3_comparison_chart_{seq}.png')
     plt.show()
 
-draw_mre_chart('final_results.csv')
+draw_mre_chart('3_final_results.csv')
 for i in range(21):
-    if i == 5 or i == 8 or i == 12 or i == 14:
+    if i == 5 or i == 8 or i == 12 or i == 14 or i == 17:
         continue
     draw_comparison_chart(f"{i:04d}")
 # draw_comparison_chart("0010")
