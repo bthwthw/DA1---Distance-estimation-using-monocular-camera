@@ -5,7 +5,7 @@ import seaborn as sns
 import numpy as np
 import os
 
-file_pattern = 'logs/4_*_details.csv'
+file_pattern = 'logs/5_*_details.csv'
 all_files = sorted(glob.glob(file_pattern))
 
 if not all_files:
@@ -43,7 +43,7 @@ agg_df_rounded = agg_df.round(2)
 print("\n=== Final Error Statistics by Distance Range ===")
 print(agg_df_rounded.to_string())
 
-agg_csv_name = 'final_aggregated_error_stats_4.csv'
+agg_csv_name = 'final_aggregated_error_stats_5.csv'
 agg_df.to_csv(agg_csv_name, index=False)
 print(f"\nĐã lưu bảng thống kê vào file: {agg_csv_name}")
 
@@ -67,7 +67,7 @@ for bin_label in unique_bins:
 
 if outliers_list:
     final_outliers_df = pd.concat(outliers_list)
-    outliers_csv_name = 'outliers_by_distance_bins_4.csv'
+    outliers_csv_name = 'outliers_by_distance_bins_5.csv'
     final_outliers_df.to_csv(outliers_csv_name, index=False)
     print(f"\n=> Đã xuất toàn bộ danh sách phân loại ra file: {outliers_csv_name}")
 
@@ -92,7 +92,7 @@ plt.grid(True, linestyle='--', alpha=0.7)
 plt.xticks(rotation=45)
 
 plt.tight_layout()
-plot_img_name = 'final_error_analysis_1.png'
+plot_img_name = 'final_error_analysis_5.png'
 plt.savefig(plot_img_name, dpi=300) 
 print(f"Đã lưu biểu đồ vào file: {plot_img_name}")
 

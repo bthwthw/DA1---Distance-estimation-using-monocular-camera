@@ -99,10 +99,11 @@ class VisionSystem:
 
                             # Kalman & Distance
                             if obj_id not in self.kalman_filters:
-                                self.kalman_filters[obj_id] = KalmanFilter1D(2.0, 1.5, current_v_bottom)
+                                self.kalman_filters[obj_id] = KalmanFilter1D(2.5, 0.5, current_v_bottom)
                             v_bottom_muot = self.kalman_filters[obj_id].update(current_v_bottom)
 
                             if not headless:
+                                cv2.circle(frame, (int(u), int(current_v_bottom)), 5, (0, 0, 255), 1)
                                 cv2.circle(frame, (int(u), int(v_bottom_muot)), 3, (0, 255, 0), -1)
 
                             raw_distance = self.estimator.estimate_ground(v_bottom_muot)
@@ -184,7 +185,7 @@ class VisionSystem:
             logger.save_csv()
 
 if __name__ == "__main__":
-    seq = '0007'
+    seq = '0002'
     IMG_DIR = f'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/{seq}' 
     CALIB_FILE = f'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/{seq}.txt'
     LABEL_FILE = f'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/{seq}.txt'
