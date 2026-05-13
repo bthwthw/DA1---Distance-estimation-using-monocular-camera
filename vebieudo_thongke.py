@@ -5,7 +5,7 @@ import seaborn as sns
 import numpy as np
 import os
 
-file_pattern = 'logs/3_*_details.csv'
+file_pattern = 'logs/4_*_details.csv'
 all_files = sorted(glob.glob(file_pattern))
 
 if not all_files:
