@@ -6,7 +6,7 @@ import numpy as np
 from modules.detector import ObjectDetector
 from modules.estimator import DistanceEstimator
 from modules.evaluator import KittiLabelReader, calculate_iou
-from modules.kalman import KalmanFilter1D, KalmanFilter2D
+from modules.filter import KalmanFilter1D, KalmanFilter2D
 from modules.logger import SystemLogger
 import time
 
@@ -75,7 +75,13 @@ class VisionSystem:
                         if cls_id in [0, 2] and box.id is not None:
                             obj_id = int(box.id[0])
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            u, v_bottom = self.detector.get_bottom_center(box)
+                            
+                            u, v_bottom = self.estimator.refine_v_bottom(frame, x1, y1, x2, y2)
+                            if not headless:
+                                cv2.circle(frame, (u, v_bottom), 3, (0, 0, 255), -1)
+
+                            # x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            # u, v_bottom = self.detector.get_bottom_center(box)
                             
                             if cv2.pointPolygonTest(corridor_pts, (u, v_bottom), False) < 0:
                                 continue
@@ -155,6 +161,7 @@ class VisionSystem:
                 logger.log_frame(time.time() - start_inf)
                 
                 if not headless:
+                    cv2.line(frame, (0, int(self.c_y)), (w_img, int(self.c_y)), (0, 255, 255), 1)
                     cv2.polylines(frame, [corridor_pts], True, (255, 100, 0), 2)
                     cv2.imshow("Robot Vision Demo", frame)
                     if cv2.waitKey(1) == ord('q'): break
@@ -162,7 +169,7 @@ class VisionSystem:
             logger.save_csv()
 
 if __name__ == "__main__":
-    seq = '0015'
+    seq = '0010'
     IMG_DIR = f'C:/Users/Thu/Downloads/data_tracking_image_2/training/image_02/{seq}' 
     CALIB_FILE = f'C:/Users/Thu/Downloads/data_tracking_calib/training/calib/{seq}.txt'
     LABEL_FILE = f'C:/Users/Thu/Downloads/data_tracking_label_2/training/label_02/{seq}.txt'

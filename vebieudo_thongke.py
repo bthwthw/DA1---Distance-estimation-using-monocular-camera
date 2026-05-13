@@ -43,7 +43,7 @@ agg_df_rounded = agg_df.round(2)
 print("\n=== Final Error Statistics by Distance Range (RANSAC version) ===")
 print(agg_df_rounded.to_string())
 
-agg_csv_name = 'final_aggregated_error_stats_3.csv'
+agg_csv_name = 'final_aggregated_error_stats_4.csv'
 agg_df.to_csv(agg_csv_name, index=False)
 print(f"\nĐã lưu bảng thống kê vào file: {agg_csv_name}")
 
@@ -67,7 +67,7 @@ for bin_label in unique_bins:
 
 if outliers_list:
     final_outliers_df = pd.concat(outliers_list)
-    outliers_csv_name = 'outliers_by_distance_bins_3.csv'
+    outliers_csv_name = 'outliers_by_distance_bins_4.csv'
     final_outliers_df.to_csv(outliers_csv_name, index=False)
     print(f"\n=> Đã xuất toàn bộ danh sách phân loại ra file: {outliers_csv_name}")
 
